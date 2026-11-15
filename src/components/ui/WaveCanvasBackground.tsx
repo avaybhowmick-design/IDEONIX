@@ -70,20 +70,22 @@ export default function WaveCanvasBackground() {
       aria-hidden="true"
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#050505]"
     >
-      <canvas ref={canvasRef} className="block h-full w-full" />
+      <div className="absolute -inset-3" style={{ filter: 'blur(6px)' }}>
+        <canvas ref={canvasRef} className="block h-full w-full" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.56), rgba(255, 255, 255, 0.04) 10px, rgba(0, 0, 0, 0.56) 20px)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+        />
+      </div>
       <div
         className="absolute inset-0"
         style={{
-          background:
-            'repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.45), rgba(255, 255, 255, 0.06) 10px, rgba(0, 0, 0, 0.45) 20px)',
-          backdropFilter: 'blur(5px)',
-          WebkitBackdropFilter: 'blur(5px)',
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background: 'linear-gradient(to bottom, #050505 0%, rgba(5, 5, 5, 0) 100%)',
+          background: 'linear-gradient(to bottom, #050505 0%, rgba(5, 5, 5, 0.35) 100%)',
         }}
       />
     </div>

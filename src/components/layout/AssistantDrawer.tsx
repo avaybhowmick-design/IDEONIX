@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { MessageSquare, Send, X } from 'lucide-react';
 import { useWorkspace } from '../../context/WorkspaceContext';
@@ -6,7 +6,6 @@ import { sendAssistantMessageApi } from '../../services/aiClient';
 import type { AssistantMessage } from '../../types/ideonix';
 import {
   CopyTextButton,
-  GlassCard,
   inputClassName,
   PrimaryButton,
   ResultsSkeleton,
@@ -94,44 +93,68 @@ export function AssistantDrawer() {
     sendPrompt(input);
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
   return (
     <>
       <AnimatePresence>
-        {/* Floating Assistant Trigger */}
+        {/* Floating Assistant Trigger — narrow upper-right tab below Voice header */}
         {!open && (
           <motion.button
             key="assistant-trigger"
             type="button"
-            initial={{ opacity: 0, y: 12, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.96 }}
-            whileHover={{ y: -2 }}
+            initial={{ opacity: 0, x: 10, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 10, scale: 0.96 }}
+            whileHover={{ x: -2 }}
             whileTap={{ scale: 0.97 }}
             transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
             onClick={() => setOpen(true)}
+            title="AI Creator Assistant"
             aria-label="Open AI Creator Assistant"
-            className="glass fixed right-4 bottom-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-xl !border-white/30 !bg-white/15 px-3.5 py-2.5 text-xs font-semibold text-white transition-[background-color,border-color,filter] duration-200 hover:!bg-white/25 hover:brightness-110"
+            className="glass fixed top-[68px] right-0 z-40 inline-flex h-9 w-7 items-center justify-center !rounded-l-xl !rounded-r-none !border-r-0 !border-white/30 !bg-white/15 text-white transition-[background-color,border-color,filter] duration-200 hover:!bg-white/25 hover:brightness-110"
           >
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
-            <span>Creator Assistant</span>
+            <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
           </motion.button>
         )}
 
-        {/* Drawer */}
+        {/* Backdrop for click-outside and dimming */}
+        {open && (
+          <motion.div
+            key="assistant-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px]"
+          />
+        )}
+
+        {/* Opaque, High-Contrast Upper-Right Assistant Pop-up */}
         {open && (
           <motion.aside
             key="assistant-drawer"
             aria-label="AI Creator Assistant"
-            initial={{ opacity: 0, x: 32, scale: 0.98 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 32, scale: 0.98 }}
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: durations.base, ease: MOTION_EASING.out }}
-            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col p-3 sm:p-4"
+            className="fixed top-[68px] right-3 sm:right-4 z-50 flex h-[min(460px,calc(100dvh-5.25rem))] w-[min(calc(100vw-1.5rem),360px)] flex-col"
           >
-            <GlassCard hoverLift={false} className="flex h-full flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b border-white/15 px-5 py-4">
+            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-[#0d0d12] shadow-[0_24px_70px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.08)]">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/12 bg-[#121218] px-4 py-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-white">AI Creator Assistant</h2>
+                  <h2 className="text-xs font-semibold text-white">AI Creator Assistant</h2>
                   <p className="text-[11px] text-neutral-400">
                     Context: {brandVoice.preset} voice · {library.length} library items
                   </p>
@@ -143,14 +166,14 @@ export function AssistantDrawer() {
                   transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
                   aria-label="Close AI Creator Assistant"
                   onClick={() => setOpen(false)}
-                  className="glass inline-flex h-10 w-10 items-center justify-center rounded-xl text-neutral-300 hover:border-white/30 hover:text-white"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-neutral-300 transition-colors hover:border-white/30 hover:bg-white/10 hover:text-white"
                 >
-                  <X className="h-4 w-4" aria-hidden="true" />
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </motion.button>
               </div>
 
               {/* Quick context starters */}
-              <div className="flex flex-wrap gap-1.5 border-b border-white/15 px-5 py-2.5">
+              <div className="flex flex-wrap gap-1.5 border-b border-white/12 bg-[#101015] px-4 py-2">
                 {[
                   'Suggest 3 hooks matching my brand voice',
                   'Give me a post idea from my library',
@@ -159,11 +182,11 @@ export function AssistantDrawer() {
                     key={quick}
                     type="button"
                     disabled={sending}
-                    whileHover={sending ? undefined : { y: -2 }}
+                    whileHover={sending ? undefined : { y: -1 }}
                     whileTap={sending ? undefined : { scale: 0.97 }}
                     transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
                     onClick={() => sendPrompt(quick)}
-                    className="glass rounded-lg px-2.5 py-1 text-[11px] text-neutral-300 hover:border-white/30 hover:text-white disabled:opacity-50"
+                    className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-neutral-200 transition-colors hover:border-white/30 hover:bg-white/10 hover:text-white disabled:opacity-50"
                   >
                     {quick}
                   </motion.button>
@@ -171,7 +194,7 @@ export function AssistantDrawer() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+              <div className="flex-1 space-y-2.5 overflow-y-auto bg-[#0d0d12] px-4 py-3">
                 <AnimatePresence initial={false}>
                   {messages.map((msg) => (
                     <motion.div
@@ -180,15 +203,15 @@ export function AssistantDrawer() {
                       initial="initial"
                       animate="animate"
                       exit="exit"
-                      className={`glass rounded-xl px-4 py-3 text-xs leading-relaxed ${
+                      className={`rounded-xl px-3.5 py-2.5 text-xs leading-relaxed ${
                         msg.role === 'user'
-                          ? 'ml-6 !border-white/30 !bg-white/12 text-white'
-                          : 'mr-4 text-neutral-200'
+                          ? 'ml-6 border border-white/30 bg-white/15 text-white'
+                          : 'mr-4 border border-white/12 bg-[#16161d] text-neutral-200 shadow-sm'
                       }`}
                     >
                       <p className="whitespace-pre-line">{msg.text}</p>
                       {msg.role === 'assistant' && msg.id !== 'welcome_msg' && (
-                        <div className="mt-2.5 flex items-center gap-2 border-t border-white/15 pt-2">
+                        <div className="mt-2.5 flex items-center gap-2 border-t border-white/10 pt-2">
                           <CopyTextButton text={msg.text} />
                           <SaveActionButton
                             variant="compact"
@@ -213,19 +236,20 @@ export function AssistantDrawer() {
                 </AnimatePresence>
 
                 {sending && (
-                  <div className="glass mr-4 rounded-xl px-4 py-3">
+                  <div className="mr-4 rounded-xl border border-white/12 bg-[#16161d] px-4 py-3">
                     <ResultsSkeleton variant="inline" />
                   </div>
                 )}
 
                 {error && (
-                  <div role="alert" className="glass rounded-xl !border-white/35 !bg-white/10 px-3.5 py-2.5 text-xs text-white">
+                  <div role="alert" className="rounded-xl border border-white/30 bg-white/10 px-3.5 py-2.5 text-xs text-white">
                     {error}
                   </div>
                 )}
               </div>
 
-              <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/15 p-4">
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/12 bg-[#121218] p-3">
                 <input
                   aria-label="Message AI Creator Assistant"
                   value={input}
@@ -243,7 +267,7 @@ export function AssistantDrawer() {
                   {!sending && <Send className="h-4 w-4" aria-hidden="true" />}
                 </PrimaryButton>
               </form>
-            </GlassCard>
+            </div>
           </motion.aside>
         )}
       </AnimatePresence>
