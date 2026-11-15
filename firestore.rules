@@ -1,0 +1,227 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidTags(tags) {
+      return tags is list && tags.size() <= 10 && (tags.size() == 0 || tags[0] is string);
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'brandVoice', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'brandVoice', 'creatorProfile', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && isValidString(data.email, 3, 320)
+        && isValidString(data.displayName, 0, 120)
+        && data.brandVoice is map
+        && (!('creatorProfile' in data) || data.creatorProfile is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLibraryItem(data) {
+      return data.keys().hasAll(['id', 'userId', 'category', 'title', 'summary', 'platform', 'tags', 'payload', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'category', 'title', 'summary', 'platform', 'tags', 'payload', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.category in ['idea', 'script', 'caption', 'repurpose', 'campaign', 'autopilot', 'viral', 'doctor', 'assistant']
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.summary, 0, 1000)
+        && isValidString(data.platform, 1, 60)
+        && isValidTags(data.tags)
+        && data.payload is map
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCampaign(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'topic', 'objective', 'audience', 'duration', 'platform', 'overview', 'status', 'days', 'checklist', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'topic', 'objective', 'audience', 'duration', 'platform', 'overview', 'status', 'days', 'checklist', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.topic, 1, 300)
+        && isValidString(data.objective, 1, 300)
+        && isValidString(data.audience, 1, 200)
+        && isValidString(data.duration, 1, 60)
+        && isValidString(data.platform, 1, 60)
+        && isValidString(data.overview, 0, 4000)
+        && data.status in ['Draft', 'Active', 'Completed']
+        && data.days is list && data.days.size() <= 60
+        && data.checklist is list && data.checklist.size() <= 50
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCalendarEntry(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'date', 'timeSlot', 'platform', 'status', 'notes', 'reminderAt', 'linkedScriptId', 'linkedScriptTitle', 'linkedCaptionId', 'linkedCaptionTitle', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'date', 'timeSlot', 'platform', 'status', 'notes', 'reminderAt', 'linkedScriptId', 'linkedScriptTitle', 'linkedCaptionId', 'linkedCaptionTitle', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.date, 4, 20)
+        && isValidString(data.timeSlot, 0, 20)
+        && isValidString(data.platform, 1, 60)
+        && data.status in ['Draft', 'Planned', 'Published']
+        && isValidString(data.notes, 0, 2000)
+        && isValidString(data.reminderAt, 0, 40)
+        && isValidString(data.linkedScriptId, 0, 128)
+        && isValidString(data.linkedScriptTitle, 0, 200)
+        && isValidString(data.linkedCaptionId, 0, 128)
+        && isValidString(data.linkedCaptionTitle, 0, 200)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['id', 'userId', 'tool', 'title', 'dateKey', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'tool', 'title', 'dateKey', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.tool, 1, 60)
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.dateKey, 4, 20)
+        && data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'brandVoice', 'creatorProfile', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(userId) && isOwner(userId);
+    }
+
+    match /libraryItems/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(itemId)
+        && isValidLibraryItem(incoming())
+        && incoming().id == itemId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(itemId)
+        && existing().userId == request.auth.uid
+        && isValidLibraryItem(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'summary', 'platform', 'tags', 'payload', 'category', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(itemId) && existing().userId == request.auth.uid;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get: if isSignedIn() && isValidId(campaignId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(campaignId)
+        && isValidCampaign(incoming())
+        && incoming().id == campaignId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(campaignId)
+        && existing().userId == request.auth.uid
+        && existing().status != 'Completed'
+        && isValidCampaign(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'overview', 'days', 'checklist', 'updatedAt'])) ||
+          (incoming().status in ['Draft', 'Active', 'Completed'] && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(campaignId) && existing().userId == request.auth.uid;
+    }
+
+    match /calendarEntries/{entryId} {
+      allow get: if isSignedIn() && isValidId(entryId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(entryId)
+        && isValidCalendarEntry(incoming())
+        && incoming().id == entryId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(entryId)
+        && existing().userId == request.auth.uid
+        && existing().status != 'Published'
+        && isValidCalendarEntry(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'date', 'timeSlot', 'platform', 'notes', 'reminderAt', 'linkedScriptId', 'linkedScriptTitle', 'linkedCaptionId', 'linkedCaptionTitle', 'updatedAt'])) ||
+          (incoming().status in ['Draft', 'Planned', 'Published'] && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(entryId) && existing().userId == request.auth.uid;
+    }
+
+    match /activityLogs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(logId)
+        && isValidActivityLog(incoming())
+        && incoming().id == logId
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(logId) && existing().userId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,290 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user profile, brand voice settings, and creator profile snapshot.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 320
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "brandVoice": {
+          "type": "object"
+        },
+        "creatorProfile": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "displayName", "brandVoice", "createdAt", "updatedAt"]
+    },
+    "LibraryItem": {
+      "title": "LibraryItem",
+      "description": "Saved creative output generated or edited by the user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["idea", "script", "caption", "repurpose", "campaign", "autopilot", "viral", "doctor", "assistant"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "platform": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "tags": {
+          "type": "array"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "category", "title", "summary", "platform", "tags", "payload", "createdAt", "updatedAt"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Multi-day content campaign with daily items and checklist.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "topic": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "objective": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "audience": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "duration": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "platform": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "overview": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Draft", "Active", "Completed"]
+        },
+        "days": {
+          "type": "array"
+        },
+        "checklist": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "title", "topic", "objective", "audience", "duration", "platform", "overview", "status", "days", "checklist", "createdAt", "updatedAt"]
+    },
+    "CalendarEntry": {
+      "title": "CalendarEntry",
+      "description": "Scheduled content calendar slot with linked script or caption references.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "timeSlot": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "platform": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Draft", "Planned", "Published"]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "reminderAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "linkedScriptId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "linkedScriptTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "linkedCaptionId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "linkedCaptionTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "title", "date", "timeSlot", "platform", "status", "notes", "reminderAt", "linkedScriptId", "linkedScriptTitle", "linkedCaptionId", "linkedCaptionTitle", "createdAt", "updatedAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable activity record for weekly creator dashboard telemetry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "dateKey": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "tool", "title", "dateKey", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile, brand voice, and creator profile analysis."
+    },
+    "/libraryItems/{itemId}": {
+      "schema": { "$ref": "#/entities/LibraryItem" },
+      "description": "Saved creative library items owned by a user."
+    },
+    "/campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/Campaign" },
+      "description": "Structured content campaigns owned by a user."
+    },
+    "/calendarEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/CalendarEntry" },
+      "description": "Content calendar schedules and reminders owned by a user."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "User generation activity records for the dashboard weekly chart."
+    }
+  }
+}

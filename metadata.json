@@ -1,0 +1,6 @@
+{
+  "name": "IDEONIX",
+  "description": "IDEONIX — From Ideas to Impact. Turn a simple idea into a complete AI-powered content strategy with scripts, captions, repurposing, viral analysis, and publishing calendar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,101 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --bg-obsidian: #07070b;
+    --bg-charcoal: #0d0e16;
+    --surface-glass: rgba(17, 18, 28, 0.62);
+    --border-glass: rgba(255, 255, 255, 0.11);
+    --violet-accent: #8b5cf6;
+  }
+
+  html,
+  body {
+    min-height: 100dvh;
+    background-color: var(--bg-obsidian);
+    color: #f4f4f8;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: 0.01em;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .font-mono,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+}
+
+/* Apple Liquid Glass surface */
+.liquid-glass {
+  position: relative;
+  background: linear-gradient(
+    160deg,
+    rgba(28, 30, 46, 0.66) 0%,
+    rgba(13, 14, 22, 0.72) 100%
+  );
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(139, 92, 246, 0.12),
+    0 24px 64px -24px rgba(0, 0, 0, 0.78);
+}
+
+.liquid-glass-subtle {
+  position: relative;
+  background: rgba(16, 17, 27, 0.54);
+  backdrop-filter: blur(16px) saturate(145%);
+  -webkit-backdrop-filter: blur(16px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Chromium SVG feDisplacementMap refraction rim layer with clean @supports blur fallback */
+.liquid-refraction-rim {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  opacity: 0.45;
+  z-index: 0;
+}
+
+@supports (backdrop-filter: url(#ideonix-liquid-refraction)) {
+  .liquid-refraction-rim {
+    backdrop-filter: url(#ideonix-liquid-refraction) blur(16px) saturate(175%);
+  }
+}
+
+.liquid-glass > *:not(.liquid-refraction-rim) {
+  position: relative;
+  z-index: 1;
+}
+
+.headline-balance {
+  text-wrap: balance;
+}
+
+/* Respect user reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
