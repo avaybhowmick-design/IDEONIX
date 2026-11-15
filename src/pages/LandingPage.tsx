@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowRight,
   Calendar,
@@ -17,60 +17,17 @@ import {
   BrandWordmark,
   GlassButton,
   GlassCard,
+  GlassSelect,
   inputClassName,
   PrimaryButton,
+  ResultsSkeleton,
+  StaggerGroup,
 } from '../components/ui/GlassPrimitives';
 import { LegalModal } from '../components/ui/LegalModal';
 import { generateIdeasApi } from '../services/aiClient';
 import type { GeneratedIdea } from '../types/ideonix';
+import { MOTION_EASING, useMotionSettings } from '../config/motion';
 
-const PREVIEW_TABS = [
-  {
-    id: 'autopilot',
-    label: 'Creator Autopilot',
-    heading: '7-Day Short-Form Launch Pipeline',
-    meta: '8 autonomous steps · Brand Voice synced',
-    items: [
-      '01. Preferences & Pillars — Cinematic Storytelling · Small-room studio creators',
-      '02. Hook Angles — "You do not need three lights—you need one dark wall."',
-      '03. Flagship Script — 45s 3-scene pacing with transition cues',
-      '04. Weekly Calendar — 5 scheduled posts linked to scripts and captions',
-    ],
-  },
-  {
-    id: 'script',
-    label: 'Script Studio',
-    heading: 'Scene-by-Scene Production Breakdown',
-    meta: 'Instagram Reels · 45s · 3 Scenes',
-    items: [
-      '0:00–0:05 · Overhead light flicks off; side key light snaps on',
-      '0:05–0:25 · Top-down 45° key light & negative fill diagram',
-      '0:25–0:45 · Split-screen comparison + targeted save CTA',
-    ],
-  },
-  {
-    id: 'viral',
-    label: 'Viral Analyzer',
-    heading: 'Structural Quality Evaluation',
-    meta: 'AI-generated estimate · 7 dimensions',
-    items: [
-      'Hook Strength: 88/100 · Immediate visual contrast in first 2 seconds',
-      'Clarity: 91/100 · Concrete physical setup steps without jargon',
-      'Actionable Fix: Trim intro pause by 0.5s before diagram transition',
-    ],
-  },
-] as const;
-
-const SAMPLE_DEMO_IDEA: GeneratedIdea = {
-  id: 'sample_landing_1',
-  title: 'Stop Over-Lighting Your Desk: The 1-Lamp Studio Rule',
-  description:
-    'Show creators why turning off ceiling lights and adding a single side key light instantly elevates low-budget video.',
-  hook: 'Your camera is not the problem—your ceiling light is.',
-  format: '45s Split-Screen Reel',
-  audienceRelevance: 'Targets creators filming in bedrooms or small offices.',
-  cta: 'Comment "LIGHT" for the 1-page angle diagram.',
-};
 
 const FAQS = [
   {
@@ -92,25 +49,21 @@ const FAQS = [
 ];
 
 export function LandingPage() {
-  const { setView, enterDemoMode, brandVoice } = useWorkspace();
-  const [previewTab, setPreviewTab] = useState<'autopilot' | 'script' | 'viral'>('autopilot');
+  const { setView, brandVoice, firebaseUser } = useWorkspace();
   const [demoTopic, setDemoTopic] = useState('How solo editors can cut editing time in half');
   const [demoPlatform, setDemoPlatform] = useState('Instagram Reels');
   const [demoResult, setDemoResult] = useState<GeneratedIdea | null>(null);
-  const [demoIsSample, setDemoIsSample] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
-
-  const activePreview = PREVIEW_TABS.find((t) => t.id === previewTab) || PREVIEW_TABS[0];
+  const { durations } = useMotionSettings();
 
   const handleInteractiveDemo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!demoTopic.trim() || demoLoading) return;
     setDemoLoading(true);
     setDemoError(null);
-    setDemoIsSample(false);
     try {
       const ideas = await generateIdeasApi({
         niche: 'Creator Workflow & Video Production',
@@ -131,21 +84,15 @@ export function LandingPage() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#07070b] text-[#f4f4f8]">
-      {/* Subtle ambient background mesh */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 top-0 h-[560px] bg-[radial-gradient(ellipse_at_top,rgba(139,92,246,0.16),transparent_65%)]"
-      />
-
+    <div className="min-h-[100dvh] text-neutral-100">
       {/* Top Bar Contract: Zone 1 Brand — Zone 2 Links — Zone 3 Primary CTA */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07070b]/80 backdrop-blur-xl">
+      <header className="glass sticky top-0 z-30 rounded-none border-x-0 border-t-0">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-8 px-5 py-3.5 md:px-8">
           <a href="#top" className="whitespace-nowrap shrink-0">
             <BrandWordmark />
           </a>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-[#b8bcd0]">
+          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-neutral-300">
             <a href="#features" className="hover:text-white transition-colors whitespace-nowrap shrink-0">
               Features
             </a>
@@ -158,18 +105,24 @@ export function LandingPage() {
             <a href="#pricing" className="hover:text-white transition-colors whitespace-nowrap shrink-0">
               Pricing
             </a>
-            <button
+            <motion.button
               type="button"
-              onClick={() => setView('login')}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+              onClick={() => setView(firebaseUser ? 'dashboard' : 'login')}
               className="hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
-              Login
-            </button>
+              {firebaseUser ? 'Dashboard' : 'Login'}
+            </motion.button>
           </nav>
 
           <div className="flex items-center gap-3 shrink-0">
-            <PrimaryButton onClick={() => setView('login')} className="px-4 py-2 text-xs sm:text-sm">
-              Get Started
+            <PrimaryButton
+              onClick={() => setView(firebaseUser ? 'dashboard' : 'login')}
+              className="px-4 py-2 text-xs sm:text-sm"
+            >
+              {firebaseUser ? 'Open Workspace' : 'Get Started'}
             </PrimaryButton>
           </div>
         </div>
@@ -178,23 +131,23 @@ export function LandingPage() {
       <main id="top" className="relative z-10">
         {/* Hero Section */}
         <section className="mx-auto max-w-6xl px-5 pt-14 pb-20 md:px-8 md:pt-20">
-          <div className="grid items-stretch gap-10 lg:grid-cols-12">
-            <div className="flex flex-col justify-center lg:col-span-6">
-              <p className="text-xs font-medium tracking-wide text-violet-300">
+          <div className="max-w-3xl">
+            <div className="flex flex-col justify-center">
+              <p className="text-xs font-medium tracking-wide text-neutral-300">
                 IDEONIX · From Ideas to Impact.
               </p>
               <h1 className="headline-balance mt-4 text-[clamp(2.25rem,4vw,3.75rem)] font-bold leading-[1.08] tracking-tight text-white">
                 Turn Your Ideas Into Content That Connects.
               </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-[#b8bcd0]">
+              <p className="mt-5 max-w-xl text-base leading-relaxed text-neutral-300">
                 Go from a single rough thought to a complete content strategy. Generate hooks,
                 shoot-ready scripts, platform-native captions, quality diagnostics, and a structured
                 publishing calendar inside one calm workspace.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <PrimaryButton onClick={() => setView('login')}>
-                  <span>Start Creating</span>
+                <PrimaryButton onClick={() => setView(firebaseUser ? 'dashboard' : 'login')}>
+                  <span>{firebaseUser ? 'Open Dashboard' : 'Start Creating'}</span>
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </PrimaryButton>
                 <GlassButton
@@ -204,73 +157,20 @@ export function LandingPage() {
                 >
                   Explore Features
                 </GlassButton>
-                <button
-                  type="button"
-                  onClick={enterDemoMode}
-                  className="min-h-[44px] px-3 text-sm font-medium text-[#b8bcd0] underline decoration-white/25 underline-offset-4 hover:text-white"
-                >
-                  Launch Demo Workspace
-                </button>
               </div>
-            </div>
-
-            {/* Animated Interactive Dashboard Preview */}
-            <div className="lg:col-span-6">
-              <GlassCard className="h-full p-5 sm:p-6" withRefraction>
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-4">
-                  <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
-                    {PREVIEW_TABS.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setPreviewTab(tab.id)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                          previewTab === tab.id
-                            ? 'bg-violet-600 text-white'
-                            : 'text-[#b8bcd0] hover:text-white'
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <motion.div
-                  key={activePreview.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="mt-5"
-                >
-                  <div className="text-xs text-[#9ca2b8]">{activePreview.meta}</div>
-                  <h2 className="mt-1 text-lg font-semibold text-white">{activePreview.heading}</h2>
-
-                  <div className="mt-4 space-y-2.5">
-                    {activePreview.items.map((line, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#d9dce8]"
-                      >
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              </GlassCard>
             </div>
           </div>
         </section>
 
         {/* Problem & Solution */}
         <section className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-          <div className="grid gap-6 md:grid-cols-2">
-            <GlassCard subtle className="p-7">
-              <p className="text-xs font-medium text-[#9ca2b8]">The Creator Bottleneck</p>
+          <StaggerGroup className="grid gap-6 md:grid-cols-2">
+            <GlassCard className="p-7">
+              <p className="text-xs font-medium text-neutral-400">The Creator Bottleneck</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">
                 Scattered docs, inconsistent voice, zero feedback loop.
               </h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#b8bcd0]">
+              <p className="mt-3 text-sm leading-relaxed text-neutral-300">
                 Creators juggle separate note apps for hooks, generic chat threads for scripts,
                 spreadsheets for schedules, and guesswork for pacing. Every platform rewrite drifts
                 further from their actual voice.
@@ -278,107 +178,107 @@ export function LandingPage() {
             </GlassCard>
 
             <GlassCard className="p-7">
-              <p className="text-xs font-medium text-violet-300">The IDEONIX Pipeline</p>
+              <p className="text-xs font-medium text-neutral-300">The IDEONIX Pipeline</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">
                 Connected modules sharing one Brand Voice & Library.
               </h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#b8bcd0]">
+              <p className="mt-3 text-sm leading-relaxed text-neutral-300">
                 Define your voice once. Run Autopilot or open any dedicated studio—every script,
                 caption, viral audit, Content Doctor rewrite, and calendar slot pulls from the same
                 creative context.
               </p>
             </GlassCard>
-          </div>
+          </StaggerGroup>
         </section>
 
         {/* Asymmetric Feature Bento Grid */}
         <section id="features" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-medium text-violet-300">Capabilities</p>
+            <p className="text-xs font-medium text-neutral-300">Capabilities</p>
             <h2 className="headline-balance mt-2 text-3xl font-bold tracking-tight text-white">
               Thirteen connected tools built for daily publishing.
             </h2>
           </div>
 
-          <div className="mt-10 grid gap-5 md:grid-cols-6">
+          <StaggerGroup className="mt-10 grid gap-5 md:grid-cols-6">
             <GlassCard className="p-6 md:col-span-4">
               <div className="flex items-center justify-between">
-                <Wand2 className="h-5 w-5 text-violet-300" aria-hidden="true" />
-                <span className="text-xs text-[#9ca2b8]">Signature Pipeline</span>
+                <Wand2 className="h-5 w-5 text-white" aria-hidden="true" />
+                <span className="text-xs text-neutral-400">Signature Pipeline</span>
               </div>
               <h3 className="mt-4 text-xl font-semibold text-white">Creator Autopilot</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[#b8bcd0]">
+              <p className="mt-2 text-sm leading-relaxed text-neutral-300">
                 Moves sequentially through preferences, strategy, ideas, flagship script, captions,
                 viral critique, Content Doctor edits, and a weekly calendar—letting you regenerate
                 any single step without restarting.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-2">
-              <FileText className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-2">
+              <FileText className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Script Studio</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 Timed scene-by-scene breakdowns, voiceover notes, transitions, and per-section edits.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-2">
-              <Repeat className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-2">
+              <Repeat className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Content Repurposer</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 Turns one script into Instagram Reel, YouTube Shorts, YouTube Description, Facebook,
                 LinkedIn, and X posts.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-2">
-              <Gauge className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-2">
+              <Gauge className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Viral Analyzer</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 7-axis quality estimate (Hook, Relevance, Clarity, Engagement, Storytelling, CTA,
                 Structure) with concrete fixes.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-2">
-              <Stethoscope className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-2">
+              <Stethoscope className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Content Doctor</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 Flags weak transitions and filler wording, showing original vs. improved copy side by
                 side.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-3">
-              <Layers className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-3">
+              <Layers className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Campaign Studio & Brand Voice</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 Generate multi-day launch plans with interactive checklists, and lock your voice
                 preset across every future output.
               </p>
             </GlassCard>
 
-            <GlassCard subtle className="p-6 md:col-span-3">
-              <Calendar className="h-5 w-5 text-violet-300" aria-hidden="true" />
+            <GlassCard className="p-6 md:col-span-3">
+              <Calendar className="h-5 w-5 text-white" aria-hidden="true" />
               <h3 className="mt-4 text-lg font-semibold text-white">Calendar & Creator Assistant</h3>
-              <p className="mt-2 text-sm text-[#b8bcd0]">
+              <p className="mt-2 text-sm text-neutral-300">
                 Monthly, weekly, and daily schedules linked to saved scripts and captions, backed by
                 an always-available context-aware assistant.
               </p>
             </GlassCard>
-          </div>
+          </StaggerGroup>
         </section>
 
         {/* How It Works */}
         <section id="how-it-works" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-medium text-violet-300">How It Works</p>
+            <p className="text-xs font-medium text-neutral-300">How It Works</p>
             <h2 className="headline-balance mt-2 text-3xl font-bold tracking-tight text-white">
               Three steps from raw concept to scheduled week.
             </h2>
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <StaggerGroup className="mt-10 grid gap-6 md:grid-cols-3">
             {[
               {
                 num: '01. Capture & Align',
@@ -393,31 +293,30 @@ export function LandingPage() {
                 desc: 'Save final assets to My Library, link scripts directly to Content Calendar slots, and track Draft to Published progress.',
               },
             ].map((step) => (
-              <div key={step.num} className="border-t border-white/15 pt-5">
+              <GlassCard key={step.num} className="p-6">
                 <h3 className="text-lg font-semibold text-white">{step.num}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#b8bcd0]">{step.desc}</p>
-              </div>
+                <p className="mt-2 text-sm leading-relaxed text-neutral-300">{step.desc}</p>
+              </GlassCard>
             ))}
-          </div>
+          </StaggerGroup>
         </section>
 
         {/* Interactive Demo */}
         <section id="demo" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-          <GlassCard className="p-6 sm:p-8" withRefraction>
+          <GlassCard className="p-6 sm:p-8">
             <div className="grid gap-8 lg:grid-cols-12">
               <div className="lg:col-span-5">
-                <p className="text-xs font-medium text-violet-300">Interactive Demo</p>
+                <p className="text-xs font-medium text-neutral-300">Interactive Demo</p>
                 <h2 className="mt-2 text-2xl font-bold text-white">
                   Test an idea angle right here.
                 </h2>
-                <p className="mt-2 text-sm text-[#b8bcd0]">
-                  Calls the live IDEONIX backend Gemini endpoint or lets you inspect a clearly
-                  labeled sample output.
+                <p className="mt-2 text-sm text-neutral-300">
+                  Calls the live IDEONIX backend Gemini endpoint to generate a structured angle.
                 </p>
 
                 <form onSubmit={handleInteractiveDemo} className="mt-5 space-y-4">
                   <div>
-                    <label htmlFor="landing-topic" className="mb-1.5 block text-xs font-medium text-[#b8bcd0]">
+                    <label htmlFor="landing-topic" className="mb-1.5 block text-xs font-medium text-neutral-300">
                       Video Topic
                     </label>
                     <input
@@ -429,80 +328,70 @@ export function LandingPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="landing-platform" className="mb-1.5 block text-xs font-medium text-[#b8bcd0]">
+                    <label htmlFor="landing-platform" className="mb-1.5 block text-xs font-medium text-neutral-300">
                       Platform
                     </label>
-                    <select
+                    <GlassSelect
                       id="landing-platform"
                       value={demoPlatform}
-                      onChange={(e) => setDemoPlatform(e.target.value)}
-                      className={inputClassName}
-                    >
-                      <option value="Instagram Reels">Instagram Reels</option>
-                      <option value="YouTube Shorts">YouTube Shorts</option>
-                      <option value="YouTube Long-form">YouTube Long-form</option>
-                      <option value="LinkedIn">LinkedIn</option>
-                    </select>
+                      onChange={setDemoPlatform}
+                      options={['Instagram Reels', 'YouTube Shorts', 'YouTube Long-form', 'LinkedIn']}
+                    />
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <PrimaryButton type="submit" loading={demoLoading}>
                       Generate Live Idea
                     </PrimaryButton>
-                    <GlassButton
-                      onClick={() => {
-                        setDemoError(null);
-                        setDemoResult(SAMPLE_DEMO_IDEA);
-                        setDemoIsSample(true);
-                      }}
-                    >
-                      Load Sample Data
-                    </GlassButton>
                   </div>
                 </form>
 
                 {demoError && (
-                  <p role="alert" className="mt-3 text-xs text-rose-300">
+                  <p role="alert" className="mt-3 text-xs text-neutral-200">
                     {demoError}
                   </p>
                 )}
               </div>
 
               <div className="lg:col-span-7">
-                <div className="h-full rounded-2xl border border-white/10 bg-[#07070b]/70 p-6">
-                  {demoResult ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between text-xs text-[#9ca2b8]">
+                <div className="glass h-full rounded-2xl p-6">
+                  {demoLoading ? (
+                    <ResultsSkeleton variant="inline" />
+                  ) : demoResult ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: durations.base, ease: MOTION_EASING.out }}
+                      className="space-y-4"
+                    >
+                      <div className="flex items-center justify-between text-xs text-neutral-400">
                         <span>
                           {demoResult.format} · {demoPlatform}
                         </span>
-                        {demoIsSample && (
-                          <span className="font-medium text-amber-300">Sample data</span>
-                        )}
                       </div>
                       <h3 className="text-xl font-semibold text-white">{demoResult.title}</h3>
-                      <p className="text-sm text-[#b8bcd0]">{demoResult.description}</p>
-                      <div className="border-t border-white/10 pt-4 space-y-2 text-sm">
+                      <p className="text-sm text-neutral-300">{demoResult.description}</p>
+                      <div className="border-t border-white/15 pt-4 space-y-2 text-sm">
                         <p>
-                          <span className="font-semibold text-violet-300">Hook: </span>
-                          <span className="text-white">{demoResult.hook}</span>
+                          <span className="font-semibold text-white">Hook: </span>
+                          <span className="text-neutral-200">{demoResult.hook}</span>
                         </p>
                         <p>
-                          <span className="font-semibold text-violet-300">Audience Fit: </span>
-                          <span className="text-[#b8bcd0]">{demoResult.audienceRelevance}</span>
+                          <span className="font-semibold text-white">Audience Fit: </span>
+                          <span className="text-neutral-300">{demoResult.audienceRelevance}</span>
                         </p>
                         <p>
-                          <span className="font-semibold text-violet-300">CTA: </span>
-                          <span className="text-[#b8bcd0]">{demoResult.cta}</span>
+                          <span className="font-semibold text-white">CTA: </span>
+                          <span className="text-neutral-300">{demoResult.cta}</span>
                         </p>
                       </div>
-                    </div>
+                    </motion.div>
                   ) : (
                     <div className="flex h-full min-h-[220px] flex-col items-center justify-center text-center">
-                      <Sliders className="h-6 w-6 text-violet-300/70" aria-hidden="true" />
+                      <Sliders className="h-6 w-6 text-neutral-300" aria-hidden="true" />
                       <p className="mt-3 text-sm font-medium text-white">
                         Ready to preview an IDEONIX concept
                       </p>
-                      <p className="mt-1 max-w-sm text-xs text-[#9ca2b8]">
+                      <p className="mt-1 max-w-sm text-xs text-neutral-400">
                         Submit a topic on the left to generate a structured hook, format, and CTA.
                       </p>
                     </div>
@@ -516,13 +405,13 @@ export function LandingPage() {
         {/* Pricing */}
         <section id="pricing" className="mx-auto max-w-6xl px-5 py-16 md:px-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-medium text-violet-300">Pricing</p>
+            <p className="text-xs font-medium text-neutral-300">Pricing</p>
             <h2 className="headline-balance mt-2 text-3xl font-bold tracking-tight text-white">
               Transparent tiers for solo creators and studios.
             </h2>
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <StaggerGroup className="mt-10 grid gap-6 md:grid-cols-3">
             {[
               {
                 name: 'Starter',
@@ -561,21 +450,20 @@ export function LandingPage() {
             ].map((tier) => (
               <GlassCard
                 key={tier.name}
-                subtle={!tier.featured}
                 className={`flex flex-col justify-between p-6 ${
-                  tier.featured ? 'ring-1 ring-violet-400/50' : ''
+                  tier.featured ? '!border-white/35 ring-1 ring-white/25' : ''
                 }`}
               >
                 <div>
-                  <p className="text-xs text-[#9ca2b8]">{tier.audience}</p>
+                  <p className="text-xs text-neutral-400">{tier.audience}</p>
                   <h3 className="mt-1 text-xl font-bold text-white">{tier.name}</h3>
                   <div className="mt-4 flex items-baseline gap-2">
                     <span className="font-mono text-3xl font-bold text-white tabular-nums">
                       {tier.price}
                     </span>
-                    <span className="text-xs text-[#9ca2b8]">{tier.cadence}</span>
+                    <span className="text-xs text-neutral-400">{tier.cadence}</span>
                   </div>
-                  <ul className="mt-6 space-y-2.5 border-t border-white/10 pt-5 text-sm text-[#b8bcd0]">
+                  <ul className="mt-6 space-y-2.5 border-t border-white/15 pt-5 text-sm text-neutral-300">
                     {tier.limits.map((lim) => (
                       <li key={lim}>{lim}</li>
                     ))}
@@ -595,50 +483,63 @@ export function LandingPage() {
                 </div>
               </GlassCard>
             ))}
-          </div>
+          </StaggerGroup>
         </section>
 
         {/* FAQ */}
         <section className="mx-auto max-w-4xl px-5 py-16 md:px-8">
           <h2 className="text-2xl font-bold text-white">Frequently Asked Questions</h2>
-          <div className="mt-6 divide-y divide-white/10 border-y border-white/10">
+          <GlassCard className="mt-6 divide-y divide-white/15 px-6">
             {FAQS.map((item, idx) => {
               const isOpen = openFaq === idx;
               return (
                 <div key={item.q}>
-                  <button
+                  <motion.button
                     type="button"
+                    whileTap={{ scale: 0.99 }}
                     aria-expanded={isOpen}
                     onClick={() => setOpenFaq(isOpen ? null : idx)}
-                    className="flex min-h-[52px] w-full items-center justify-between gap-4 py-4 text-left text-sm font-medium text-white hover:text-violet-200"
+                    className="flex min-h-[52px] w-full items-center justify-between gap-4 py-4 text-left text-sm font-medium text-white hover:text-neutral-200"
                   >
                     <span>{item.q}</span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 text-[#9ca2b8] transition-transform ${
-                        isOpen ? 'rotate-180' : ''
-                      }`}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  {isOpen && (
-                    <p className="pb-5 text-sm leading-relaxed text-[#b8bcd0]">{item.a}</p>
-                  )}
+                    <motion.span
+                      initial={false}
+                      animate={{ rotate: isOpen ? 180 : 0 }}
+                      transition={{ duration: durations.micro, ease: MOTION_EASING.out }}
+                      className="inline-flex shrink-0 items-center"
+                    >
+                      <ChevronDown className="h-4 w-4 text-neutral-400" aria-hidden="true" />
+                    </motion.span>
+                  </motion.button>
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.p
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: durations.micro, ease: MOTION_EASING.out }}
+                        className="pb-5 text-sm leading-relaxed text-neutral-300"
+                      >
+                        {item.a}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })}
-          </div>
+          </GlassCard>
         </section>
       </main>
 
-      <footer className="border-t border-white/10 bg-[#07070b]/90 px-5 py-10 md:px-8">
+      <footer className="glass rounded-none border-x-0 border-b-0 px-5 py-10 md:px-8">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div>
             <BrandWordmark />
-            <p className="mt-2 text-xs text-[#7e8399]">
+            <p className="mt-2 text-xs text-neutral-400">
               IDEONIX · From Ideas to Impact.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-6 text-xs text-[#9ca2b8]">
+          <div className="flex flex-wrap items-center gap-6 text-xs text-neutral-300">
             <button type="button" onClick={() => setLegalModal('terms')} className="hover:text-white">
               Terms of Service
             </button>

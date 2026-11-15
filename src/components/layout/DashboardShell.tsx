@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useReducedMotion,
+} from 'motion/react';
+import {
   BookMarked,
   Calendar,
   ChevronLeft,
-  ChevronRight,
   FileText,
   Gauge,
   LayoutDashboard,
@@ -22,6 +27,20 @@ import {
 import { useWorkspace } from '../../context/WorkspaceContext';
 import type { DashboardPageId } from '../../types/ideonix';
 import { BrandWordmark } from '../ui/GlassPrimitives';
+import {
+  getPageVariants,
+  getToastVariants,
+  MOTION_EASING,
+  useMotionSettings,
+} from '../../config/motion';
+import {
+  getNavItemEntranceDelay,
+  getSidebarPillTransition,
+  scaleDuration,
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_EXPANDED_WIDTH,
+  SIDEBAR_TIMING,
+} from './sidebarMotion';
 import { AssistantDrawer } from './AssistantDrawer';
 import { OverviewPage } from '../../pages/dashboard/OverviewPage';
 import { AutopilotPage } from '../../pages/dashboard/AutopilotPage';
@@ -57,12 +76,112 @@ const NAV_ITEMS: Array<{
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
+interface SidebarNavItemProps {
+  item: {
+    id: DashboardPageId;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  };
+  index: number;
+  active: boolean;
+  collapsed?: boolean;
+  pillLayoutId: string;
+  prefersReduced: boolean | null;
+  onSelect: (id: DashboardPageId) => void;
+}
+
+function SidebarNavItem({
+  item,
+  index,
+  active,
+  collapsed = false,
+  pillLayoutId,
+  prefersReduced,
+  onSelect,
+}: SidebarNavItemProps) {
+  const [isHovered, setIsHovered] = useState(false);
+  const Icon = item.icon;
+  const hoverDur = scaleDuration(SIDEBAR_TIMING.hoverDuration, prefersReduced);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{
+        duration: scaleDuration(0.28, prefersReduced),
+        delay: getNavItemEntranceDelay(index, prefersReduced),
+        ease: 'easeOut',
+      }}
+    >
+      <motion.button
+        type="button"
+        onClick={() => onSelect(item.id)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        whileHover={{ x: SIDEBAR_TIMING.hoverShiftX }}
+        whileTap={{ scale: SIDEBAR_TIMING.tapScale }}
+        transition={{ duration: hoverDur, ease: 'easeOut' }}
+        title={item.label}
+        aria-current={active ? 'page' : undefined}
+        className="relative flex min-h-[42px] w-full items-center gap-3 rounded-xl px-[18px] py-2 text-left text-sm font-medium whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+      >
+        <motion.span
+          aria-hidden="true"
+          initial={false}
+          animate={{ opacity: isHovered && !active ? 1 : 0 }}
+          transition={{ duration: hoverDur, ease: 'easeOut' }}
+          className="pointer-events-none absolute inset-0 rounded-xl bg-white/[0.06]"
+        />
+        {active && (
+          <motion.span
+            layoutId={pillLayoutId}
+            initial={false}
+            style={{ borderRadius: 12 }}
+            transition={{ layout: getSidebarPillTransition(prefersReduced) }}
+            className="glass pointer-events-none absolute inset-0 rounded-xl !border-white/30 !bg-white/15"
+            aria-hidden="true"
+          />
+        )}
+        <motion.span
+          initial={false}
+          animate={{ scale: isHovered ? SIDEBAR_TIMING.hoverIconScale : 1 }}
+          transition={{ duration: hoverDur, ease: 'easeOut' }}
+          className="relative z-10 inline-flex shrink-0 items-center justify-center"
+        >
+          <Icon
+            className={`h-4 w-4 transition-colors duration-200 ${
+              active || isHovered ? 'text-white' : 'text-neutral-400'
+            }`}
+          />
+        </motion.span>
+        <motion.span
+          initial={false}
+          animate={{
+            opacity: collapsed ? 0 : 1,
+            x: collapsed ? -6 : 0,
+          }}
+          transition={{
+            duration: scaleDuration(collapsed ? 0.14 : 0.22, prefersReduced),
+            delay: collapsed ? 0 : scaleDuration(0.05, prefersReduced),
+            ease: 'easeOut',
+          }}
+          aria-hidden={collapsed}
+          className={`relative z-10 truncate transition-colors duration-200 ${
+            active || isHovered ? 'text-white' : 'text-neutral-300'
+          } ${collapsed ? 'pointer-events-none' : ''}`}
+        >
+          {item.label}
+        </motion.span>
+      </motion.button>
+    </motion.div>
+  );
+}
+
 export function DashboardShell() {
   const {
     activePage,
     setActivePage,
     firebaseUser,
-    demoMode,
     brandVoice,
     logout,
     toastMessage,
@@ -71,6 +190,11 @@ export function DashboardShell() {
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [signOutHovered, setSignOutHovered] = useState(false);
+  const prefersReduced = useReducedMotion();
+  const { durations } = useMotionSettings();
+  const pageVariants = getPageVariants(durations.base);
+  const toastVariants = getToastVariants(durations.base);
 
   const currentNav = NAV_ITEMS.find((n) => n.id === activePage) || NAV_ITEMS[0];
 
@@ -111,150 +235,303 @@ export function DashboardShell() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] bg-[#07070b] text-[#f4f4f8]">
-      {/* Desktop Collapsible Sidebar */}
-      <aside
-        aria-label="Workspace navigation"
-        className={`hidden lg:flex flex-col border-r border-white/10 bg-[#0b0c13]/90 backdrop-blur-xl transition-all duration-200 ${
-          collapsed ? 'w-[76px]' : 'w-[256px]'
-        } shrink-0`}
-      >
-        <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
-          {!collapsed && <BrandWordmark />}
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#b8bcd0] hover:text-white"
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
-        </div>
+    <div className="flex min-h-[100dvh] text-neutral-100">
+        {/* Desktop Collapsible Sidebar */}
+        <motion.aside
+          aria-label="Workspace navigation"
+          initial={{
+            x: SIDEBAR_TIMING.entranceX,
+            opacity: 0,
+            width: SIDEBAR_EXPANDED_WIDTH,
+          }}
+          animate={{
+            x: 0,
+            opacity: 1,
+            width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
+          }}
+          transition={{
+            x: {
+              duration: scaleDuration(SIDEBAR_TIMING.entranceDuration, prefersReduced),
+              ease: [0.22, 1, 0.36, 1],
+            },
+            opacity: {
+              duration: scaleDuration(SIDEBAR_TIMING.entranceDuration, prefersReduced),
+              ease: 'easeOut',
+            },
+            width: {
+              duration: scaleDuration(SIDEBAR_TIMING.collapseDuration, prefersReduced),
+              ease: [0.22, 1, 0.36, 1],
+            },
+          }}
+          className="glass hidden lg:flex flex-col overflow-hidden rounded-none border-y-0 border-l-0 shrink-0"
+        >
+          <div className="relative flex h-16 items-center justify-end border-b border-white/15 px-[18px]">
+            <motion.div
+              initial={false}
+              animate={{
+                opacity: collapsed ? 0 : 1,
+                x: collapsed ? -8 : 0,
+              }}
+              transition={{
+                duration: scaleDuration(collapsed ? 0.14 : 0.22, prefersReduced),
+                delay: collapsed ? 0 : scaleDuration(0.05, prefersReduced),
+                ease: 'easeOut',
+              }}
+              aria-hidden={collapsed}
+              className={`absolute left-4 ${collapsed ? 'pointer-events-none' : ''}`}
+            >
+              <BrandWordmark shimmer />
+            </motion.div>
+            <motion.button
+              type="button"
+              whileTap={{ scale: SIDEBAR_TIMING.tapScale }}
+              onClick={() => setCollapsed((c) => !c)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="glass relative z-10 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-white"
+            >
+              <motion.span
+                initial={false}
+                animate={{ rotate: collapsed ? SIDEBAR_TIMING.collapseArrowRotate : 0 }}
+                transition={{
+                  duration: scaleDuration(SIDEBAR_TIMING.collapseDuration, prefersReduced),
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="inline-flex items-center justify-center"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </motion.span>
+            </motion.button>
+          </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = activePage === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelectPage(item.id)}
-                title={item.label}
-                aria-current={active ? 'page' : undefined}
-                className={`flex min-h-[42px] w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
-                  active
-                    ? 'bg-violet-600/25 text-white border border-violet-400/35'
-                    : 'text-[#b8bcd0] hover:bg-white/[0.05] hover:text-white border border-transparent'
+          <LayoutGroup id="desktop-sidebar-nav">
+            <nav className="flex-1 space-y-1 overflow-x-hidden overflow-y-auto p-3">
+              {NAV_ITEMS.map((item, idx) => (
+                <SidebarNavItem
+                  key={item.id}
+                  item={item}
+                  index={idx}
+                  active={activePage === item.id}
+                  collapsed={collapsed}
+                  pillLayoutId="sidebar-active-pill"
+                  prefersReduced={prefersReduced}
+                  onSelect={handleSelectPage}
+                />
+              ))}
+            </nav>
+          </LayoutGroup>
+
+          <div className="border-t border-white/15 p-3 space-y-1">
+            {firebaseUser && (
+              <motion.div
+                initial={false}
+                animate={{
+                  opacity: collapsed ? 0 : 1,
+                  x: collapsed ? -6 : 0,
+                }}
+                transition={{
+                  duration: scaleDuration(collapsed ? 0.14 : 0.22, prefersReduced),
+                  ease: 'easeOut',
+                }}
+                aria-hidden={collapsed}
+                className={`overflow-hidden px-3 py-1.5 text-xs ${
+                  collapsed ? 'pointer-events-none' : ''
                 }`}
               >
-                <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-violet-300' : 'text-[#9ca2b8]'}`} />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-white/10 p-3">
-          <button
-            type="button"
-            onClick={logout}
-            title="Sign Out"
-            className="flex min-h-[42px] w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[#b8bcd0] hover:bg-white/[0.05] hover:text-white"
-          >
-            <LogOut className="h-4 w-4 shrink-0 text-[#9ca2b8]" aria-hidden="true" />
-            {!collapsed && <span>{firebaseUser ? 'Sign Out' : 'Exit Demo'}</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Mobile Drawer */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="relative z-10 flex w-72 flex-col border-r border-white/10 bg-[#0b0c13] p-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <BrandWordmark />
-              <button
-                type="button"
-                aria-label="Close navigation menu"
-                onClick={() => setMobileOpen(false)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 text-[#b8bcd0]"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-            </div>
-            <nav className="mt-3 flex-1 space-y-1 overflow-y-auto">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const active = activePage === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelectPage(item.id)}
-                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium ${
-                      active
-                        ? 'bg-violet-600/25 text-white border border-violet-400/35'
-                        : 'text-[#b8bcd0] hover:bg-white/[0.05] hover:text-white'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-            <button
+                <p className="truncate font-medium text-white">
+                  {firebaseUser.displayName || 'Creator'}
+                </p>
+                <p className="truncate text-[11px] text-neutral-400">{firebaseUser.email}</p>
+              </motion.div>
+            )}
+            <motion.button
               type="button"
               onClick={logout}
-              className="mt-3 flex min-h-[44px] w-full items-center gap-3 rounded-xl border-t border-white/10 px-3 pt-3 text-sm font-medium text-[#b8bcd0]"
+              onMouseEnter={() => setSignOutHovered(true)}
+              onMouseLeave={() => setSignOutHovered(false)}
+              whileTap={{ scale: SIDEBAR_TIMING.tapScale }}
+              title="Sign Out"
+              className="relative flex min-h-[42px] w-full items-center gap-3 rounded-xl px-[18px] py-2 text-left text-sm font-medium whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span>{firebaseUser ? 'Sign Out' : 'Exit Demo'}</span>
-            </button>
-          </aside>
-        </div>
-      )}
+              <motion.span
+                aria-hidden="true"
+                initial={false}
+                animate={{ opacity: signOutHovered ? 1 : 0 }}
+                transition={{
+                  duration: scaleDuration(SIDEBAR_TIMING.hoverDuration, prefersReduced),
+                  ease: 'easeOut',
+                }}
+                className="pointer-events-none absolute inset-0 rounded-xl bg-white/[0.06]"
+              />
+              <motion.span
+                initial={false}
+                animate={{ x: signOutHovered ? SIDEBAR_TIMING.signOutArrowNudgeX : 0 }}
+                transition={{
+                  duration: scaleDuration(SIDEBAR_TIMING.hoverDuration, prefersReduced),
+                  ease: 'easeOut',
+                }}
+                className="relative z-10 inline-flex shrink-0 items-center justify-center"
+              >
+                <LogOut
+                  className={`h-4 w-4 transition-colors duration-200 ${
+                    signOutHovered ? 'text-[#ffd4d4]' : 'text-neutral-400'
+                  }`}
+                  aria-hidden="true"
+                />
+              </motion.span>
+              <motion.span
+                initial={false}
+                animate={{
+                  opacity: collapsed ? 0 : 1,
+                  x: collapsed ? -6 : 0,
+                }}
+                transition={{
+                  duration: scaleDuration(collapsed ? 0.14 : 0.22, prefersReduced),
+                  delay: collapsed ? 0 : scaleDuration(0.05, prefersReduced),
+                  ease: 'easeOut',
+                }}
+                aria-hidden={collapsed}
+                className={`relative z-10 truncate transition-colors duration-200 ${
+                  signOutHovered ? 'text-[#ffd4d4]' : 'text-neutral-300'
+                } ${collapsed ? 'pointer-events-none' : ''}`}
+              >
+                Sign Out
+              </motion.span>
+            </motion.button>
+          </div>
+        </motion.aside>
+
+        {/* Mobile Drawer */}
+        <AnimatePresence>
+          {mobileOpen && (
+            <div className="fixed inset-0 z-50 flex lg:hidden">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: scaleDuration(0.2, prefersReduced) }}
+                className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+                onClick={() => setMobileOpen(false)}
+              />
+              <motion.aside
+                initial={{ x: -288, opacity: 0.9 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -288, opacity: 0.9 }}
+                transition={{
+                  duration: scaleDuration(0.28, prefersReduced),
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                className="glass relative z-10 flex w-72 flex-col rounded-r-2xl p-4"
+              >
+                <div className="flex items-center justify-between border-b border-white/15 pb-4">
+                  <BrandWordmark shimmer />
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: SIDEBAR_TIMING.tapScale }}
+                    aria-label="Close navigation menu"
+                    onClick={() => setMobileOpen(false)}
+                    className="glass inline-flex h-11 w-11 items-center justify-center rounded-xl text-neutral-300 hover:text-white"
+                  >
+                    <X className="h-5 w-5" aria-hidden="true" />
+                  </motion.button>
+                </div>
+                <LayoutGroup id="mobile-sidebar-nav">
+                  <nav className="mt-3 flex-1 space-y-1 overflow-x-hidden overflow-y-auto">
+                    {NAV_ITEMS.map((item, idx) => (
+                      <SidebarNavItem
+                        key={item.id}
+                        item={item}
+                        index={idx}
+                        active={activePage === item.id}
+                        pillLayoutId="mobile-sidebar-active-pill"
+                        prefersReduced={prefersReduced}
+                        onSelect={handleSelectPage}
+                      />
+                    ))}
+                  </nav>
+                </LayoutGroup>
+                <motion.button
+                  type="button"
+                  onClick={logout}
+                  onMouseEnter={() => setSignOutHovered(true)}
+                  onMouseLeave={() => setSignOutHovered(false)}
+                  whileTap={{ scale: SIDEBAR_TIMING.tapScale }}
+                  className="mt-3 relative flex min-h-[44px] w-full items-center gap-3 rounded-xl border-t border-white/15 px-[18px] pt-3 text-sm font-medium"
+                >
+                  <motion.span
+                    initial={false}
+                    animate={{ x: signOutHovered ? SIDEBAR_TIMING.signOutArrowNudgeX : 0 }}
+                    transition={{
+                      duration: scaleDuration(SIDEBAR_TIMING.hoverDuration, prefersReduced),
+                      ease: 'easeOut',
+                    }}
+                    className="inline-flex shrink-0 items-center justify-center"
+                  >
+                    <LogOut
+                      className={`h-4 w-4 transition-colors duration-200 ${
+                        signOutHovered ? 'text-[#ffd4d4]' : 'text-neutral-400'
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </motion.span>
+                  <span
+                    className={`transition-colors duration-200 ${
+                      signOutHovered ? 'text-[#ffd4d4]' : 'text-neutral-300'
+                    }`}
+                  >
+                    Sign Out
+                  </span>
+                </motion.button>
+              </motion.aside>
+            </div>
+          )}
+        </AnimatePresence>
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-white/10 bg-[#07070b]/80 px-4 backdrop-blur-xl sm:px-6">
+        <header className="glass sticky top-0 z-20 flex h-16 items-center justify-between gap-4 rounded-none border-x-0 border-t-0 px-4 sm:px-6">
           <div className="flex items-center gap-3 min-w-0">
-            <button
+            <motion.button
               type="button"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
               aria-label="Open navigation menu"
               onClick={() => setMobileOpen(true)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#b8bcd0] lg:hidden"
+              className="glass inline-flex h-11 w-11 items-center justify-center rounded-xl text-neutral-300 hover:border-white/30 hover:text-white lg:hidden"
             >
               <Menu className="h-5 w-5" aria-hidden="true" />
-            </button>
+            </motion.button>
             <span className="truncate text-sm font-semibold text-white">
               IDEONIX / {currentNav.label}
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-xs text-[#9ca2b8] shrink-0">
-            <button
+          <div className="flex items-center gap-4 text-xs text-neutral-400 shrink-0">
+            <motion.button
               type="button"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
               onClick={() => setActivePage('brand-voice')}
               className="hidden sm:inline-block hover:text-white whitespace-nowrap"
             >
-              Voice: <span className="text-violet-300 font-medium">{brandVoice.preset}</span>
-            </button>
-            {demoMode && !firebaseUser && (
-              <span className="text-amber-300 font-medium whitespace-nowrap">
-                Local Demo Mode
-              </span>
-            )}
+              Voice: <span className="font-medium text-white">{brandVoice.preset}</span>
+            </motion.button>
           </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 pb-24 sm:px-6 lg:px-8">
-          {renderPage()}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activePage}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              {renderPage()}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -262,26 +539,33 @@ export function DashboardShell() {
       <AssistantDrawer />
 
       {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          role="status"
-          className={`fixed bottom-5 left-5 z-50 flex max-w-sm items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs shadow-2xl backdrop-blur-xl ${
-            toastMessage.type === 'error'
-              ? 'border-rose-400/40 bg-rose-950/90 text-rose-100'
-              : 'border-violet-400/40 bg-[#121320]/95 text-white'
-          }`}
-        >
-          <span>{toastMessage.text}</span>
-          <button
-            type="button"
-            aria-label="Dismiss message"
-            onClick={clearToast}
-            className="text-[#b8bcd0] hover:text-white"
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            key={toastMessage.text}
+            role="status"
+            variants={toastVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`glass fixed bottom-5 left-5 z-50 flex max-w-sm items-center justify-between gap-3 rounded-xl px-4 py-3 text-xs text-white ${
+              toastMessage.type === 'error' ? '!border-white/40 !bg-white/15' : ''
+            }`}
           >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      )}
+            <span>{toastMessage.text}</span>
+            <motion.button
+              type="button"
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.97 }}
+              aria-label="Dismiss message"
+              onClick={clearToast}
+              className="text-neutral-300 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

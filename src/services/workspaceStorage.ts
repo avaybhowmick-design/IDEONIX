@@ -11,24 +11,16 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../config/firebase';
-import type {
-  ActivityLog,
-  BrandVoiceConfig,
-  CalendarEntry,
-  CampaignPlan,
-  CreatorProfileAnalysis,
-  LibraryItem,
-} from '../types/ideonix';
 import {
-  buildSampleActivity,
-  buildSampleCalendar,
-  buildSampleCampaigns,
-  buildSampleLibrary,
   DEFAULT_BRAND_VOICE,
-} from './sampleData';
+  type ActivityLog,
+  type BrandVoiceConfig,
+  type CalendarEntry,
+  type CampaignPlan,
+  type CreatorProfileAnalysis,
+  type LibraryItem,
+} from '../types/ideonix';
 import { makeSafeId } from '../utils/creatorHelpers';
-
-const DEMO_STORAGE_KEY = 'ideonix_demo_workspace_v1';
 
 export interface WorkspaceSnapshot {
   brandVoice: BrandVoiceConfig;
@@ -39,64 +31,26 @@ export interface WorkspaceSnapshot {
   activityLogs: ActivityLog[];
 }
 
-function readLocalDemo(): WorkspaceSnapshot {
-  try {
-    const raw = localStorage.getItem(DEMO_STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw) as WorkspaceSnapshot;
-    }
-  } catch {
-    // ignore corrupted local storage
-  }
-  const seeded: WorkspaceSnapshot = {
-    brandVoice: DEFAULT_BRAND_VOICE,
-    creatorProfile: null,
-    library: buildSampleLibrary('demo-user'),
-    campaigns: buildSampleCampaigns('demo-user'),
-    calendar: buildSampleCalendar('demo-user'),
-    activityLogs: buildSampleActivity('demo-user'),
-  };
-  writeLocalDemo(seeded);
-  return seeded;
-}
-
-function writeLocalDemo(snapshot: WorkspaceSnapshot) {
-  try {
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(snapshot));
-  } catch {
-    // ignore storage quota errors
-  }
-}
-
-export function resetLocalDemoWorkspace(): WorkspaceSnapshot {
-  try {
-    localStorage.removeItem(DEMO_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-  return readLocalDemo();
-}
-
 function timestampToIso(val: unknown): string {
   if (!val) return new Date().toISOString();
   if (typeof val === 'string') return val;
-  if (typeof val === 'object' && val !== null && 'toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+  if (
+    typeof val === 'object' &&
+    val !== null &&
+    'toDate' in val &&
+    typeof (val as { toDate: () => Date }).toDate === 'function'
+  ) {
     return (val as { toDate: () => Date }).toDate().toISOString();
   }
   return new Date().toISOString();
 }
 
 export async function loadWorkspaceData(options: {
-  mode: 'firebase' | 'demo';
   uid: string;
   email: string;
   displayName: string;
   emailVerified: boolean;
 }): Promise<WorkspaceSnapshot> {
-  if (options.mode === 'demo') {
-    return readLocalDemo();
-  }
-
   const { uid, email, displayName, emailVerified } = options;
 
   let brandVoice = DEFAULT_BRAND_VOICE;
@@ -113,8 +67,8 @@ export async function loadWorkspaceData(options: {
     } else if (emailVerified) {
       await setDoc(userRef, {
         uid,
-        email: email || 'creator@ideonix.app',
-        displayName: displayName || 'Creator',
+        email: (email || 'creator@ideonix.app').slice(0, 320),
+        displayName: (displayName || 'Creator').slice(0, 120),
         brandVoice: DEFAULT_BRAND_VOICE,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -200,57 +154,64 @@ export async function loadWorkspaceData(options: {
   return { brandVoice, creatorProfile, library, campaigns, calendar, activityLogs };
 }
 
-export async function saveBrandVoiceStorage(
-  mode: 'firebase' | 'demo',
-  uid: string,
-  brandVoice: BrandVoiceConfig
-) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.brandVoice = { ...brandVoice, updatedAt: new Date().toISOString() };
-    writeLocalDemo(snap);
-    return;
-  }
+export async function saveBrandVoiceStorage(uid: string, brandVoice: BrandVoiceConfig) {
   const path = `users/${uid}`;
+  const cleanVoice = {
+    preset: brandVoice.preset,
+    customDescription: (brandVoice.customDescription || '').slice(0, 1200),
+    targetAudience: (brandVoice.targetAudience || '').slice(0, 300),
+    bannedWords: (brandVoice.bannedWords || '').slice(0, 400),
+  };
   try {
-    await updateDoc(doc(db, 'users', uid), {
-      brandVoice: {
-        preset: brandVoice.preset,
-        customDescription: brandVoice.customDescription.slice(0, 1200),
-        targetAudience: brandVoice.targetAudience.slice(0, 300),
-        bannedWords: brandVoice.bannedWords.slice(0, 400),
-      },
-      updatedAt: serverTimestamp(),
-    });
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      await updateDoc(userRef, {
+        brandVoice: cleanVoice,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(userRef, {
+        uid,
+        email: 'creator@ideonix.app',
+        displayName: 'Creator',
+        brandVoice: cleanVoice,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
 
-export async function saveCreatorProfileStorage(
-  mode: 'firebase' | 'demo',
-  uid: string,
-  profile: CreatorProfileAnalysis
-) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.creatorProfile = profile;
-    writeLocalDemo(snap);
-    return;
-  }
+export async function saveCreatorProfileStorage(uid: string, profile: CreatorProfileAnalysis) {
   const path = `users/${uid}`;
   try {
-    await updateDoc(doc(db, 'users', uid), {
-      creatorProfile: profile,
-      updatedAt: serverTimestamp(),
-    });
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      await updateDoc(userRef, {
+        creatorProfile: profile,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(userRef, {
+        uid,
+        email: 'creator@ideonix.app',
+        displayName: 'Creator',
+        brandVoice: DEFAULT_BRAND_VOICE,
+        creatorProfile: profile,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
 
 export async function saveLibraryItemStorage(
-  mode: 'firebase' | 'demo',
   uid: string,
   item: Omit<LibraryItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<LibraryItem> {
@@ -258,31 +219,23 @@ export async function saveLibraryItemStorage(
   const now = new Date().toISOString();
   const normalizedTags = (item.tags || []).slice(0, 10).map((t) => String(t).slice(0, 40));
 
+  const safePayload =
+    item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+      ? item.payload
+      : { data: item.payload ?? null };
+
   const record: LibraryItem = {
     id,
     userId: uid,
     category: item.category,
-    title: item.title.trim().slice(0, 200) || 'Untitled Item',
+    title: (item.title || '').trim().slice(0, 200) || 'Untitled Item',
     summary: (item.summary || '').trim().slice(0, 1000),
-    platform: (item.platform || 'Multi-platform').trim().slice(0, 60),
+    platform: (item.platform || '').trim().slice(0, 60) || 'Multi-platform',
     tags: normalizedTags,
-    payload: item.payload || {},
+    payload: safePayload,
     createdAt: now,
     updatedAt: now,
   };
-
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    const existingIdx = snap.library.findIndex((x) => x.id === id);
-    if (existingIdx >= 0) {
-      record.createdAt = snap.library[existingIdx].createdAt;
-      snap.library[existingIdx] = record;
-    } else {
-      snap.library.unshift(record);
-    }
-    writeLocalDemo(snap);
-    return record;
-  }
 
   const path = `libraryItems/${id}`;
   try {
@@ -318,13 +271,7 @@ export async function saveLibraryItemStorage(
   }
 }
 
-export async function deleteLibraryItemStorage(mode: 'firebase' | 'demo', id: string) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.library = snap.library.filter((i) => i.id !== id);
-    writeLocalDemo(snap);
-    return;
-  }
+export async function deleteLibraryItemStorage(id: string) {
   const path = `libraryItems/${id}`;
   try {
     await deleteDoc(doc(db, 'libraryItems', id));
@@ -334,7 +281,6 @@ export async function deleteLibraryItemStorage(mode: 'firebase' | 'demo', id: st
 }
 
 export async function saveCampaignStorage(
-  mode: 'firebase' | 'demo',
   uid: string,
   campaign: Omit<CampaignPlan, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<CampaignPlan> {
@@ -343,31 +289,18 @@ export async function saveCampaignStorage(
   const record: CampaignPlan = {
     ...campaign,
     id,
-    title: campaign.title.trim().slice(0, 200) || 'Untitled Campaign',
-    topic: campaign.topic.trim().slice(0, 300),
-    objective: campaign.objective.trim().slice(0, 300),
-    audience: campaign.audience.trim().slice(0, 200),
-    duration: campaign.duration.trim().slice(0, 60),
-    platform: campaign.platform.trim().slice(0, 60),
-    overview: campaign.overview.trim().slice(0, 4000),
-    days: campaign.days.slice(0, 60),
-    checklist: campaign.checklist.slice(0, 50),
+    title: (campaign.title || '').trim().slice(0, 200) || 'Untitled Campaign',
+    topic: (campaign.topic || '').trim().slice(0, 300) || 'General Topic',
+    objective: (campaign.objective || '').trim().slice(0, 300) || 'Audience Growth',
+    audience: (campaign.audience || '').trim().slice(0, 200) || 'Creators',
+    duration: (campaign.duration || '').trim().slice(0, 60) || '7 days',
+    platform: (campaign.platform || '').trim().slice(0, 60) || 'Multi-platform',
+    overview: (campaign.overview || '').trim().slice(0, 4000),
+    days: (campaign.days || []).slice(0, 60),
+    checklist: (campaign.checklist || []).slice(0, 50),
     createdAt: now,
     updatedAt: now,
   };
-
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    const idx = snap.campaigns.findIndex((c) => c.id === id);
-    if (idx >= 0) {
-      record.createdAt = snap.campaigns[idx].createdAt;
-      snap.campaigns[idx] = record;
-    } else {
-      snap.campaigns.unshift(record);
-    }
-    writeLocalDemo(snap);
-    return record;
-  }
 
   const path = `campaigns/${id}`;
   try {
@@ -405,17 +338,7 @@ export async function saveCampaignStorage(
   }
 }
 
-export async function updateCampaignStatusStorage(
-  mode: 'firebase' | 'demo',
-  id: string,
-  status: CampaignPlan['status']
-) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.campaigns = snap.campaigns.map((c) => (c.id === id ? { ...c, status, updatedAt: new Date().toISOString() } : c));
-    writeLocalDemo(snap);
-    return;
-  }
+export async function updateCampaignStatusStorage(id: string, status: CampaignPlan['status']) {
   const path = `campaigns/${id}`;
   try {
     await updateDoc(doc(db, 'campaigns', id), {
@@ -428,7 +351,6 @@ export async function updateCampaignStatusStorage(
 }
 
 export async function saveCalendarEntryStorage(
-  mode: 'firebase' | 'demo',
   uid: string,
   entry: Omit<CalendarEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<CalendarEntry> {
@@ -437,10 +359,10 @@ export async function saveCalendarEntryStorage(
   const record: CalendarEntry = {
     id,
     userId: uid,
-    title: entry.title.trim().slice(0, 200) || 'Untitled Post',
-    date: entry.date.slice(0, 20),
+    title: (entry.title || '').trim().slice(0, 200) || 'Untitled Post',
+    date: (entry.date || new Date().toISOString().slice(0, 10)).slice(0, 20),
     timeSlot: (entry.timeSlot || '12:00').slice(0, 20),
-    platform: (entry.platform || 'Instagram').slice(0, 60),
+    platform: (entry.platform || 'Instagram').trim().slice(0, 60) || 'Instagram',
     status: entry.status,
     notes: (entry.notes || '').slice(0, 2000),
     reminderAt: (entry.reminderAt || '').slice(0, 40),
@@ -451,20 +373,6 @@ export async function saveCalendarEntryStorage(
     createdAt: now,
     updatedAt: now,
   };
-
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    const idx = snap.calendar.findIndex((c) => c.id === id);
-    if (idx >= 0) {
-      record.createdAt = snap.calendar[idx].createdAt;
-      snap.calendar[idx] = record;
-    } else {
-      snap.calendar.push(record);
-    }
-    snap.calendar.sort((a, b) => a.date.localeCompare(b.date));
-    writeLocalDemo(snap);
-    return record;
-  }
 
   const path = `calendarEntries/${id}`;
   try {
@@ -484,6 +392,12 @@ export async function saveCalendarEntryStorage(
         linkedCaptionTitle: record.linkedCaptionTitle,
         updatedAt: serverTimestamp(),
       });
+      if (existingSnap.data()?.status !== record.status) {
+        await updateDoc(ref, {
+          status: record.status,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } else {
       await setDoc(ref, {
         id: record.id,
@@ -509,19 +423,7 @@ export async function saveCalendarEntryStorage(
   }
 }
 
-export async function updateCalendarStatusStorage(
-  mode: 'firebase' | 'demo',
-  id: string,
-  status: CalendarEntry['status']
-) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.calendar = snap.calendar.map((c) =>
-      c.id === id ? { ...c, status, updatedAt: new Date().toISOString() } : c
-    );
-    writeLocalDemo(snap);
-    return;
-  }
+export async function updateCalendarStatusStorage(id: string, status: CalendarEntry['status']) {
   const path = `calendarEntries/${id}`;
   try {
     await updateDoc(doc(db, 'calendarEntries', id), {
@@ -533,13 +435,7 @@ export async function updateCalendarStatusStorage(
   }
 }
 
-export async function deleteCalendarEntryStorage(mode: 'firebase' | 'demo', id: string) {
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.calendar = snap.calendar.filter((c) => c.id !== id);
-    writeLocalDemo(snap);
-    return;
-  }
+export async function deleteCalendarEntryStorage(id: string) {
   const path = `calendarEntries/${id}`;
   try {
     await deleteDoc(doc(db, 'calendarEntries', id));
@@ -549,7 +445,6 @@ export async function deleteCalendarEntryStorage(mode: 'firebase' | 'demo', id: 
 }
 
 export async function logActivityStorage(
-  mode: 'firebase' | 'demo',
   uid: string,
   tool: string,
   title: string
@@ -560,18 +455,11 @@ export async function logActivityStorage(
   const log: ActivityLog = {
     id,
     userId: uid,
-    tool: tool.slice(0, 60),
-    title: title.slice(0, 200),
+    tool: (tool || 'Studio').trim().slice(0, 60) || 'Studio',
+    title: (title || 'Activity').trim().slice(0, 200) || 'Activity',
     dateKey,
     createdAt: now.toISOString(),
   };
-
-  if (mode === 'demo') {
-    const snap = readLocalDemo();
-    snap.activityLogs.push(log);
-    writeLocalDemo(snap);
-    return log;
-  }
 
   const path = `activityLogs/${id}`;
   try {

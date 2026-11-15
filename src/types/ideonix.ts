@@ -203,6 +203,14 @@ export interface CreatorProfileAnalysis {
   note: string;
 }
 
+export const DEFAULT_BRAND_VOICE: BrandVoiceConfig = {
+  preset: 'Storytelling',
+  customDescription:
+    'Clear, grounded, zero-fluff pacing. Open with a visual tension hook and close with one focused question.',
+  targetAudience: 'Independent creators, filmmakers, and solo builders',
+  bannedWords: 'unlock, game-changer, secret hack, skyrocket',
+};
+
 export interface LibraryItem {
   id: string;
   userId: string;
@@ -212,7 +220,6 @@ export interface LibraryItem {
   platform: string;
   tags: string[];
   payload: Record<string, unknown>;
-  isSample?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -233,7 +240,6 @@ export interface CalendarEntry {
   linkedScriptTitle: string;
   linkedCaptionId: string;
   linkedCaptionTitle: string;
-  isSample?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -253,3 +259,4 @@ export interface AssistantMessage {
   text: string;
   timestamp: string;
 }
+

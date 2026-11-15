@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
-import { Bookmark, MessageSquare, Send, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { MessageSquare, Send, X } from 'lucide-react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { sendAssistantMessageApi } from '../../services/aiClient';
 import type { AssistantMessage } from '../../types/ideonix';
-import { CopyTextButton, GlassCard, inputClassName, PrimaryButton } from '../ui/GlassPrimitives';
+import {
+  CopyTextButton,
+  GlassCard,
+  inputClassName,
+  PrimaryButton,
+  ResultsSkeleton,
+  SaveActionButton,
+} from '../ui/GlassPrimitives';
+import { getListItemVariants, MOTION_EASING, useMotionSettings } from '../../config/motion';
 
 export function AssistantDrawer() {
   const {
@@ -27,6 +36,9 @@ export function AssistantDrawer() {
       timestamp: new Date().toISOString(),
     },
   ]);
+
+  const { durations } = useMotionSettings();
+  const listVariants = getListItemVariants(durations.base);
 
   const activeCampaign = campaigns.find((c) => c.status === 'Active') || campaigns[0];
   const librarySummary = library
@@ -84,127 +96,157 @@ export function AssistantDrawer() {
 
   return (
     <>
-      {/* Floating Assistant Trigger */}
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open AI Creator Assistant"
-          className="fixed right-4 bottom-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-violet-400/40 bg-violet-600/95 px-3.5 py-2.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md transition-transform hover:scale-[1.02] hover:bg-violet-500"
-        >
-          <MessageSquare className="h-4 w-4" aria-hidden="true" />
-          <span>Creator Assistant</span>
-        </button>
-      )}
+      <AnimatePresence>
+        {/* Floating Assistant Trigger */}
+        {!open && (
+          <motion.button
+            key="assistant-trigger"
+            type="button"
+            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.96 }}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+            onClick={() => setOpen(true)}
+            aria-label="Open AI Creator Assistant"
+            className="glass fixed right-4 bottom-4 z-40 inline-flex min-h-[44px] items-center gap-2 rounded-xl !border-white/30 !bg-white/15 px-3.5 py-2.5 text-xs font-semibold text-white transition-[background-color,border-color,filter] duration-200 hover:!bg-white/25 hover:brightness-110"
+          >
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            <span>Creator Assistant</span>
+          </motion.button>
+        )}
 
-      {/* Drawer */}
-      {open && (
-        <aside
-          aria-label="AI Creator Assistant"
-          className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col p-3 sm:p-4"
-        >
-          <GlassCard className="flex h-full flex-col overflow-hidden" withRefraction>
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <div>
-                <h2 className="text-sm font-semibold text-white">AI Creator Assistant</h2>
-                <p className="text-[11px] text-[#9ca2b8]">
-                  Context: {brandVoice.preset} voice · {library.length} library items
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close AI Creator Assistant"
-                onClick={() => setOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#b8bcd0] hover:text-white"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {/* Quick context starters */}
-            <div className="flex flex-wrap gap-1.5 border-b border-white/10 px-5 py-2.5">
-              {[
-                'Suggest 3 hooks matching my brand voice',
-                'Give me a post idea from my library',
-              ].map((quick) => (
-                <button
-                  key={quick}
+        {/* Drawer */}
+        {open && (
+          <motion.aside
+            key="assistant-drawer"
+            aria-label="AI Creator Assistant"
+            initial={{ opacity: 0, x: 32, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 32, scale: 0.98 }}
+            transition={{ duration: durations.base, ease: MOTION_EASING.out }}
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col p-3 sm:p-4"
+          >
+            <GlassCard hoverLift={false} className="flex h-full flex-col overflow-hidden">
+              <div className="flex items-center justify-between border-b border-white/15 px-5 py-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-white">AI Creator Assistant</h2>
+                  <p className="text-[11px] text-neutral-400">
+                    Context: {brandVoice.preset} voice · {library.length} library items
+                  </p>
+                </div>
+                <motion.button
                   type="button"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+                  aria-label="Close AI Creator Assistant"
+                  onClick={() => setOpen(false)}
+                  className="glass inline-flex h-10 w-10 items-center justify-center rounded-xl text-neutral-300 hover:border-white/30 hover:text-white"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </motion.button>
+              </div>
+
+              {/* Quick context starters */}
+              <div className="flex flex-wrap gap-1.5 border-b border-white/15 px-5 py-2.5">
+                {[
+                  'Suggest 3 hooks matching my brand voice',
+                  'Give me a post idea from my library',
+                ].map((quick) => (
+                  <motion.button
+                    key={quick}
+                    type="button"
+                    disabled={sending}
+                    whileHover={sending ? undefined : { y: -2 }}
+                    whileTap={sending ? undefined : { scale: 0.97 }}
+                    transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+                    onClick={() => sendPrompt(quick)}
+                    className="glass rounded-lg px-2.5 py-1 text-[11px] text-neutral-300 hover:border-white/30 hover:text-white disabled:opacity-50"
+                  >
+                    {quick}
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg) => (
+                    <motion.div
+                      key={msg.id}
+                      variants={listVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      className={`glass rounded-xl px-4 py-3 text-xs leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'ml-6 !border-white/30 !bg-white/12 text-white'
+                          : 'mr-4 text-neutral-200'
+                      }`}
+                    >
+                      <p className="whitespace-pre-line">{msg.text}</p>
+                      {msg.role === 'assistant' && msg.id !== 'welcome_msg' && (
+                        <div className="mt-2.5 flex items-center gap-2 border-t border-white/15 pt-2">
+                          <CopyTextButton text={msg.text} />
+                          <SaveActionButton
+                            variant="compact"
+                            label="Save"
+                            savedLabel="Saved"
+                            onSave={async () => {
+                              await saveLibraryItem({
+                                category: 'assistant',
+                                title: `Assistant Note (${new Date().toLocaleDateString()})`,
+                                summary: msg.text.slice(0, 140),
+                                platform: 'Multi-platform',
+                                tags: ['assistant', brandVoice.preset.toLowerCase()],
+                                payload: { reply: msg.text },
+                              });
+                              notify('Saved assistant response to My Library.');
+                            }}
+                          />
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {sending && (
+                  <div className="glass mr-4 rounded-xl px-4 py-3">
+                    <ResultsSkeleton variant="inline" />
+                  </div>
+                )}
+
+                {error && (
+                  <div role="alert" className="glass rounded-xl !border-white/35 !bg-white/10 px-3.5 py-2.5 text-xs text-white">
+                    {error}
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/15 p-4">
+                <input
+                  aria-label="Message AI Creator Assistant"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask about hooks, scripts, or strategy..."
+                  className={inputClassName}
                   disabled={sending}
-                  onClick={() => sendPrompt(quick)}
-                  className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-[#b8bcd0] hover:bg-white/[0.08] hover:text-white"
+                />
+                <PrimaryButton
+                  type="submit"
+                  loading={sending}
+                  aria-label="Send message"
+                  className="px-3.5"
                 >
-                  {quick}
-                </button>
-              ))}
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`rounded-xl border px-4 py-3 text-xs leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'ml-6 border-violet-400/35 bg-violet-600/20 text-white'
-                      : 'mr-4 border-white/10 bg-white/[0.04] text-[#e5e7f2]'
-                  }`}
-                >
-                  <p className="whitespace-pre-line">{msg.text}</p>
-                  {msg.role === 'assistant' && msg.id !== 'welcome_msg' && (
-                    <div className="mt-2.5 flex items-center gap-2 border-t border-white/10 pt-2">
-                      <CopyTextButton text={msg.text} />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await saveLibraryItem({
-                            category: 'assistant',
-                            title: `Assistant Note (${new Date().toLocaleDateString()})`,
-                            summary: msg.text.slice(0, 140),
-                            platform: 'Multi-platform',
-                            tags: ['assistant', brandVoice.preset.toLowerCase()],
-                            payload: { reply: msg.text },
-                          });
-                          notify('Saved assistant response to My Library.');
-                        }}
-                        className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-[#b8bcd0] hover:text-white"
-                      >
-                        <Bookmark className="h-3 w-3 text-violet-300" aria-hidden="true" />
-                        <span>Save</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {error && (
-                <div role="alert" className="rounded-xl border border-rose-400/35 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-200">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/10 p-4">
-              <input
-                aria-label="Message AI Creator Assistant"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about hooks, scripts, or strategy..."
-                className={inputClassName}
-                disabled={sending}
-              />
-              <PrimaryButton
-                type="submit"
-                loading={sending}
-                aria-label="Send message"
-                className="px-3.5"
-              >
-                {!sending && <Send className="h-4 w-4" aria-hidden="true" />}
-              </PrimaryButton>
-            </form>
-          </GlassCard>
-        </aside>
-      )}
+                  {!sending && <Send className="h-4 w-4" aria-hidden="true" />}
+                </PrimaryButton>
+              </form>
+            </GlassCard>
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </>
   );
 }

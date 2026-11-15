@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
-import { Bookmark, CalendarPlus, CheckSquare, Plus, Square } from 'lucide-react';
+import { LayoutGroup, motion } from 'motion/react';
+import { CalendarPlus, CheckSquare, Plus, Square } from 'lucide-react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { generateCampaignApi } from '../../services/aiClient';
 import type { CampaignPlan } from '../../types/ideonix';
+import { MOTION_EASING, useMotionSettings } from '../../config/motion';
 import {
   GlassButton,
   GlassCard,
+  GlassSelect,
   inputClassName,
   labelClassName,
   PrimaryButton,
+  ResultsSkeleton,
+  SaveActionButton,
 } from '../../components/ui/GlassPrimitives';
 
 export function CampaignStudioPage() {
@@ -22,6 +27,7 @@ export function CampaignStudioPage() {
     recordActivity,
     notify,
   } = useWorkspace();
+  const { durations, tabTransition } = useMotionSettings();
 
   const [topic, setTopic] = useState('Zero-fluff smartphone filming mini-series');
   const [objective, setObjective] = useState('Build consistent saves and grow newsletter signups');
@@ -141,30 +147,46 @@ export function CampaignStudioPage() {
     <div className="space-y-6">
       <div className="border-b border-white/10 pb-5">
         <h1 className="text-2xl font-bold text-white">Campaign Studio</h1>
-        <p className="mt-1 text-sm text-[#b8bcd0]">
+        <p className="mt-1 text-sm text-neutral-300">
           Plan multi-day campaigns with editable timelines, daily scripts, captions, hashtags, and production checklists.
         </p>
       </div>
 
       {/* Saved Campaigns Selector */}
       {campaigns.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[#9ca2b8]">Saved campaigns:</span>
-          {campaigns.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setDraftCampaign(c)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                draftCampaign?.id === c.id
-                  ? 'border-violet-400/60 bg-violet-600/25 text-white'
-                  : 'border-white/10 bg-white/[0.04] text-[#b8bcd0] hover:text-white'
-              }`}
-            >
-              {c.title} ({c.status})
-            </button>
-          ))}
-        </div>
+        <LayoutGroup id="campaign-selector-tabs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-neutral-400">Saved campaigns:</span>
+            {campaigns.map((c) => {
+              const active = draftCampaign?.id === c.id;
+              return (
+                <motion.button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setDraftCampaign(c)}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+                  className={`glass relative rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
+                    active ? 'text-white' : 'text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="campaign-active-pill"
+                      transition={tabTransition}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-xl border border-white/35 bg-white/15"
+                    />
+                  )}
+                  <span className="relative z-10">
+                    {c.title} ({c.status})
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </LayoutGroup>
       )}
 
       {/* Generator Form */}
@@ -211,16 +233,15 @@ export function CampaignStudioPage() {
           </div>
           <div>
             <label htmlFor="camp-days" className={labelClassName}>Duration (Days)</label>
-            <select
+            <GlassSelect
               id="camp-days"
-              value={durationDays}
-              onChange={(e) => setDurationDays(Number(e.target.value))}
-              className={inputClassName}
-            >
-              {[3, 5, 7, 10, 14].map((d) => (
-                <option key={d} value={d}>{d} days</option>
-              ))}
-            </select>
+              value={String(durationDays)}
+              onChange={(v) => setDurationDays(Number(v))}
+              options={[3, 5, 7, 10, 14].map((d) => ({
+                value: String(d),
+                label: `${d} days`,
+              }))}
+            />
           </div>
           <div>
             <label htmlFor="camp-start" className={labelClassName}>Start Date</label>
@@ -242,25 +263,27 @@ export function CampaignStudioPage() {
         </form>
 
         {error && (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+          <div role="alert" className="glass mt-4 rounded-xl px-4 py-3 text-xs text-white">
             {error}
           </div>
         )}
       </GlassCard>
 
-      {draftCampaign && (
+      {loading ? (
+        <ResultsSkeleton variant="script" />
+      ) : draftCampaign ? (
         <div className="space-y-6">
-          <GlassCard className="p-6" withRefraction>
+          <GlassCard index={0} className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
               <div className="flex-1 min-w-[240px]">
-                <p className="text-xs text-[#9ca2b8]">
+                <p className="text-xs text-neutral-400">
                   {draftCampaign.platform} · {draftCampaign.duration} · Status: {draftCampaign.status}
                 </p>
                 <input
                   aria-label="Campaign title"
                   value={draftCampaign.title}
                   onChange={(e) => setDraftCampaign({ ...draftCampaign, title: e.target.value })}
-                  className="mt-1 w-full bg-transparent text-xl font-bold text-white focus:outline-none"
+                  className="-mx-2 mt-1 w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-xl font-bold text-white transition-[border-color,box-shadow] duration-200 focus:!border-white focus:outline-none focus:ring-2 focus:ring-white/30"
                 />
               </div>
 
@@ -268,16 +291,18 @@ export function CampaignStudioPage() {
                 {draftCampaign.status !== 'Completed' && campaigns.some((c) => c.id === draftCampaign.id) && (
                   <GlassButton
                     onClick={() => updateCampaignStatus(draftCampaign.id, 'Completed')}
-                    className="px-3 py-1.5 text-xs"
+                    className="!min-h-[40px] px-3 py-1.5 text-xs"
                   >
                     Mark Completed
                   </GlassButton>
                 )}
-                <GlassButton onClick={handleSaveCampaign} className="px-3 py-1.5 text-xs">
-                  <Bookmark className="h-3.5 w-3.5 text-violet-300" aria-hidden="true" />
-                  <span>Save Campaign</span>
-                </GlassButton>
-                <PrimaryButton onClick={handleSyncToCalendar} className="px-3 py-1.5 text-xs">
+                <SaveActionButton
+                  onSave={handleSaveCampaign}
+                  label="Save Campaign"
+                  savedLabel="Saved Campaign"
+                  className="!px-3 !py-1.5"
+                />
+                <PrimaryButton onClick={handleSyncToCalendar} className="!min-h-[40px] px-3 py-1.5 text-xs">
                   <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Schedule to Calendar</span>
                 </PrimaryButton>
@@ -300,34 +325,37 @@ export function CampaignStudioPage() {
               <h2 className="text-sm font-semibold text-white">Production Checklist</h2>
               <div className="mt-3 space-y-2">
                 {draftCampaign.checklist.map((item) => (
-                  <button
+                  <motion.button
                     key={item.id}
                     type="button"
                     onClick={() => toggleChecklist(item.id)}
-                    className="flex min-h-[40px] w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2 text-left text-sm hover:bg-white/[0.06]"
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+                    className="glass flex min-h-[40px] w-full items-center gap-3 rounded-xl px-3.5 py-2 text-left text-sm transition-[border-color,filter] duration-200 hover:border-white/30 hover:brightness-110"
                   >
                     {item.done ? (
-                      <CheckSquare className="h-4 w-4 shrink-0 text-violet-400" aria-hidden="true" />
+                      <CheckSquare className="h-4 w-4 shrink-0 text-white" aria-hidden="true" />
                     ) : (
-                      <Square className="h-4 w-4 shrink-0 text-[#7e8399]" aria-hidden="true" />
+                      <Square className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
                     )}
-                    <span className={item.done ? 'line-through text-[#7e8399]' : 'text-[#e5e7f2]'}>
+                    <span className={item.done ? 'line-through text-neutral-500' : 'text-neutral-200'}>
                       {item.label}
                     </span>
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
           </GlassCard>
 
           {/* Editable Daily Timeline */}
-          <GlassCard subtle className="p-6">
+          <GlassCard index={1} className="p-6">
             <h2 className="text-base font-semibold text-white">Editable Daily Timeline</h2>
             <div className="mt-4 space-y-4">
               {draftCampaign.days.map((day, idx) => (
-                <div key={day.day} className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                <div key={day.day} className="glass rounded-xl p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-violet-300">
+                    <span className="text-xs font-semibold text-neutral-200">
                       Day {day.day} · {day.format}
                     </span>
                     <input
@@ -339,7 +367,7 @@ export function CampaignStudioPage() {
                         next[idx] = { ...day, publishDate: e.target.value };
                         setDraftCampaign({ ...draftCampaign, days: next });
                       }}
-                      className="rounded-lg border border-white/10 bg-[#0c0d16] px-2.5 py-1 font-mono text-xs text-white"
+                      className="glass rounded-lg px-2.5 py-1 font-mono text-xs text-white transition-[border-color,box-shadow] duration-200 focus:!border-white focus:outline-none focus:ring-2 focus:ring-white/30"
                     />
                   </div>
                   <input
@@ -354,14 +382,14 @@ export function CampaignStudioPage() {
                   />
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
-                      <p className="text-xs font-medium text-[#9ca2b8]">Idea & Script Outline</p>
-                      <p className="mt-1 text-xs leading-relaxed text-[#d9dce8]">{day.idea}</p>
-                      <p className="mt-1 text-xs text-[#9ca2b8]">{day.scriptOutline}</p>
+                      <p className="text-xs font-medium text-neutral-400">Idea & Script Outline</p>
+                      <p className="mt-1 text-xs leading-relaxed text-neutral-200">{day.idea}</p>
+                      <p className="mt-1 text-xs text-neutral-400">{day.scriptOutline}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-[#9ca2b8]">Caption & Hashtags</p>
-                      <p className="mt-1 text-xs leading-relaxed text-[#d9dce8]">{day.caption}</p>
-                      <p className="mt-1 font-mono text-xs text-violet-300/80">
+                      <p className="text-xs font-medium text-neutral-400">Caption & Hashtags</p>
+                      <p className="mt-1 text-xs leading-relaxed text-neutral-200">{day.caption}</p>
+                      <p className="mt-1 font-mono text-xs text-neutral-300">
                         {day.hashtags.join(' ')}
                       </p>
                     </div>
@@ -371,7 +399,7 @@ export function CampaignStudioPage() {
             </div>
           </GlassCard>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

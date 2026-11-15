@@ -13,22 +13,21 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider, isFirebaseConfigured } from '../config/firebase';
-import type {
-  ActivityLog,
-  BrandVoiceConfig,
-  CalendarEntry,
-  CampaignPlan,
-  CreatorProfileAnalysis,
-  DashboardPageId,
-  LibraryItem,
+import {
+  DEFAULT_BRAND_VOICE,
+  type ActivityLog,
+  type BrandVoiceConfig,
+  type CalendarEntry,
+  type CampaignPlan,
+  type CreatorProfileAnalysis,
+  type DashboardPageId,
+  type LibraryItem,
 } from '../types/ideonix';
-import { DEFAULT_BRAND_VOICE } from '../services/sampleData';
 import {
   deleteCalendarEntryStorage,
   deleteLibraryItemStorage,
   loadWorkspaceData,
   logActivityStorage,
-  resetLocalDemoWorkspace,
   saveBrandVoiceStorage,
   saveCalendarEntryStorage,
   saveCampaignStorage,
@@ -40,7 +39,6 @@ import {
 import { mapFirebaseAuthError } from '../utils/creatorHelpers';
 
 export type AppView = 'landing' | 'login' | 'dashboard';
-export type StorageMode = 'firebase' | 'demo';
 
 interface WorkspaceContextValue {
   view: AppView;
@@ -50,8 +48,6 @@ interface WorkspaceContextValue {
   authLoading: boolean;
   workspaceLoading: boolean;
   firebaseUser: User | null;
-  demoMode: boolean;
-  storageMode: StorageMode;
   effectiveUid: string;
   brandVoice: BrandVoiceConfig;
   creatorProfile: CreatorProfileAnalysis | null;
@@ -68,8 +64,6 @@ interface WorkspaceContextValue {
   resetPassword: (email: string) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
   logout: () => Promise<void>;
-  enterDemoMode: () => void;
-  resetDemoData: () => void;
   saveBrandVoice: (config: BrandVoiceConfig) => Promise<void>;
   saveCreatorProfile: (analysis: CreatorProfileAnalysis) => Promise<void>;
   saveLibraryItem: (
@@ -101,8 +95,6 @@ function isMobileOrIosSafari(): boolean {
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = useState<AppView>(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('autostart') === '1') return 'dashboard';
       if (window.location.pathname === '/login') return 'login';
       if (window.location.pathname.startsWith('/dashboard')) return 'dashboard';
     }
@@ -112,14 +104,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [demoMode, setDemoMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('autostart') === '1') return true;
-      return sessionStorage.getItem('ideonix_demo_active') === '1';
-    }
-    return false;
-  });
 
   const [brandVoice, setBrandVoice] = useState<BrandVoiceConfig>(DEFAULT_BRAND_VOICE);
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfileAnalysis | null>(null);
@@ -141,23 +125,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [toastMessage]);
 
-  // Storage mode switches automatically to local demo if user explicitly clicked demo or has an unverified email waiting
-  const storageMode: StorageMode =
-    firebaseUser && firebaseUser.emailVerified && !demoMode ? 'firebase' : 'demo';
-  const effectiveUid = firebaseUser?.uid || 'demo-user';
+  const effectiveUid = firebaseUser?.uid || '';
+
+  const resetWorkspaceState = useCallback(() => {
+    setBrandVoice(DEFAULT_BRAND_VOICE);
+    setCreatorProfile(null);
+    setLibrary([]);
+    setCampaigns([]);
+    setCalendar([]);
+    setActivityLogs([]);
+  }, []);
 
   const hydrateWorkspace = useCallback(
-    async (user: User | null, isDemo: boolean) => {
-      if (!user && !isDemo) return;
+    async (user: User | null) => {
+      if (!user) {
+        resetWorkspaceState();
+        return;
+      }
       setWorkspaceLoading(true);
       try {
-        const mode: StorageMode = user && user.emailVerified && !isDemo ? 'firebase' : 'demo';
         const data = await loadWorkspaceData({
-          mode,
-          uid: user?.uid || 'demo-user',
-          email: user?.email || 'demo@ideonix.app',
-          displayName: user?.displayName || 'Demo Creator',
-          emailVerified: Boolean(user?.emailVerified),
+          uid: user.uid,
+          email: user.email || 'creator@ideonix.app',
+          displayName: user.displayName || 'Creator',
+          emailVerified: Boolean(user.emailVerified),
         });
         setBrandVoice(data.brandVoice);
         setCreatorProfile(data.creatorProfile);
@@ -167,29 +158,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActivityLogs(data.activityLogs);
       } catch (err) {
         console.error('Failed to load workspace:', err);
-        // If Firestore rules reject (e.g. quota or permissions), surface clearly
-        notify('Could not sync cloud workspace. Using local workspace view.', 'error');
+        notify('Could not load Cloud Firestore workspace. Check your connection or permissions.', 'error');
       } finally {
         setWorkspaceLoading(false);
       }
     },
-    [notify]
+    [notify, resetWorkspaceState]
   );
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
       setAuthLoading(false);
-      if (demoMode) {
-        hydrateWorkspace(null, true);
-      }
       return;
     }
 
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
-          setDemoMode(false);
-          sessionStorage.removeItem('ideonix_demo_active');
           setView('dashboard');
           notify(`Welcome back, ${result.user.displayName || result.user.email}`);
         }
@@ -202,21 +187,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(user);
       setAuthLoading(false);
       if (user) {
-        setDemoMode(false);
-        sessionStorage.removeItem('ideonix_demo_active');
         setView((prev) => (prev === 'login' ? 'dashboard' : prev));
-        hydrateWorkspace(user, false);
-      } else if (demoMode) {
-        hydrateWorkspace(null, true);
+        hydrateWorkspace(user);
+      } else {
+        resetWorkspaceState();
+        setView((prev) => (prev === 'dashboard' ? 'login' : prev));
       }
     });
 
     return () => unsub();
-  }, [demoMode, hydrateWorkspace, notify]);
+  }, [hydrateWorkspace, notify, resetWorkspaceState]);
+
+  const requireVerifiedUid = useCallback((): string => {
+    if (!firebaseUser) {
+      notify('Please sign in to save changes.', 'error');
+      throw new Error('Authentication required');
+    }
+    if (!firebaseUser.emailVerified) {
+      notify('Please verify your email address before saving to Cloud Firestore.', 'error');
+      throw new Error('Email verification required');
+    }
+    return firebaseUser.uid;
+  }, [firebaseUser, notify]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!isFirebaseConfigured) {
-      throw new Error('Firebase is not configured. Use Demo Workspace to explore.');
+      throw new Error('Firebase Authentication is not configured.');
     }
     try {
       if (isMobileOrIosSafari()) {
@@ -225,8 +221,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
       const cred = await signInWithPopup(auth, googleProvider);
       if (cred.user) {
-        setDemoMode(false);
-        sessionStorage.removeItem('ideonix_demo_active');
         setView('dashboard');
         notify(`Signed in as ${cred.user.displayName || cred.user.email}`);
       }
@@ -244,8 +238,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     async (email: string, password: string) => {
       try {
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-        setDemoMode(false);
-        sessionStorage.removeItem('ideonix_demo_active');
         setView('dashboard');
         if (!cred.user.emailVerified) {
           notify('Signed in. Please verify your email to enable Firestore cloud writes.', 'error');
@@ -268,8 +260,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           await updateProfile(cred.user, { displayName: name.trim() });
         }
         await sendEmailVerification(cred.user).catch(() => {});
-        setDemoMode(false);
-        sessionStorage.removeItem('ideonix_demo_active');
         setView('dashboard');
         notify('Account created! Check your inbox for an email verification link.');
       } catch (err: unknown) {
@@ -296,138 +286,173 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [notify]);
 
   const logout = useCallback(async () => {
-    setDemoMode(false);
-    sessionStorage.removeItem('ideonix_demo_active');
     if (auth.currentUser) {
       await signOut(auth);
     }
     setFirebaseUser(null);
+    resetWorkspaceState();
     setView('landing');
     notify('Signed out cleanly.');
-  }, [notify]);
-
-  const enterDemoMode = useCallback(() => {
-    setDemoMode(true);
-    sessionStorage.setItem('ideonix_demo_active', '1');
-    setView('dashboard');
-    setActivePage('overview');
-    hydrateWorkspace(null, true);
-  }, [hydrateWorkspace]);
-
-  const resetDemoData = useCallback(() => {
-    const fresh = resetLocalDemoWorkspace();
-    setBrandVoice(fresh.brandVoice);
-    setCreatorProfile(fresh.creatorProfile);
-    setLibrary(fresh.library);
-    setCampaigns(fresh.campaigns);
-    setCalendar(fresh.calendar);
-    setActivityLogs(fresh.activityLogs);
-    notify('Demo sample workspace restored.');
-  }, [notify]);
+  }, [notify, resetWorkspaceState]);
 
   const saveBrandVoice = useCallback(
     async (config: BrandVoiceConfig) => {
-      await saveBrandVoiceStorage(storageMode, effectiveUid, config);
-      setBrandVoice({ ...config, updatedAt: new Date().toISOString() });
-      notify(`Brand voice "${config.preset}" saved and applied to future generations.`);
+      const uid = requireVerifiedUid();
+      try {
+        await saveBrandVoiceStorage(uid, config);
+        setBrandVoice({ ...config, updatedAt: new Date().toISOString() });
+        notify(`Brand voice "${config.preset}" saved and applied to future generations.`);
+      } catch (err) {
+        notify('Could not save Brand Voice to cloud database.', 'error');
+        throw err;
+      }
     },
-    [effectiveUid, notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const saveCreatorProfile = useCallback(
     async (analysis: CreatorProfileAnalysis) => {
-      await saveCreatorProfileStorage(storageMode, effectiveUid, analysis);
-      setCreatorProfile(analysis);
+      const uid = requireVerifiedUid();
+      try {
+        await saveCreatorProfileStorage(uid, analysis);
+        setCreatorProfile(analysis);
+      } catch (err) {
+        notify('Could not save Creator Profile to cloud database.', 'error');
+        throw err;
+      }
     },
-    [effectiveUid, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const saveLibraryItem = useCallback(
     async (item: Omit<LibraryItem, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
-      const saved = await saveLibraryItemStorage(storageMode, effectiveUid, item);
-      setLibrary((prev) => {
-        const exists = prev.some((x) => x.id === saved.id);
-        return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...prev];
-      });
-      notify(`Saved "${saved.title}" to My Library.`);
-      return saved;
+      const uid = requireVerifiedUid();
+      try {
+        const saved = await saveLibraryItemStorage(uid, item);
+        setLibrary((prev) => {
+          const exists = prev.some((x) => x.id === saved.id);
+          return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...prev];
+        });
+        notify(`Saved "${saved.title}" to My Library.`);
+        return saved;
+      } catch (err) {
+        notify('Could not save item to My Library.', 'error');
+        throw err;
+      }
     },
-    [effectiveUid, notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const deleteLibraryItem = useCallback(
     async (id: string) => {
-      await deleteLibraryItemStorage(storageMode, id);
-      setLibrary((prev) => prev.filter((i) => i.id !== id));
-      notify('Removed item from My Library.');
+      requireVerifiedUid();
+      try {
+        await deleteLibraryItemStorage(id);
+        setLibrary((prev) => prev.filter((i) => i.id !== id));
+        notify('Removed item from My Library.');
+      } catch (err) {
+        notify('Could not delete item from My Library.', 'error');
+        throw err;
+      }
     },
-    [notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const saveCampaign = useCallback(
     async (campaign: Omit<CampaignPlan, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
-      const saved = await saveCampaignStorage(storageMode, effectiveUid, campaign);
-      setCampaigns((prev) => {
-        const exists = prev.some((x) => x.id === saved.id);
-        return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...prev];
-      });
-      notify(`Campaign "${saved.title}" saved.`);
-      return saved;
+      const uid = requireVerifiedUid();
+      try {
+        const saved = await saveCampaignStorage(uid, campaign);
+        setCampaigns((prev) => {
+          const exists = prev.some((x) => x.id === saved.id);
+          return exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...prev];
+        });
+        notify(`Campaign "${saved.title}" saved.`);
+        return saved;
+      } catch (err) {
+        notify('Could not save campaign to cloud database.', 'error');
+        throw err;
+      }
     },
-    [effectiveUid, notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const updateCampaignStatus = useCallback(
     async (id: string, status: CampaignPlan['status']) => {
-      await updateCampaignStatusStorage(storageMode, id, status);
-      setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
-      notify(`Campaign marked as ${status}.`);
+      requireVerifiedUid();
+      try {
+        await updateCampaignStatusStorage(id, status);
+        setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+        notify(`Campaign marked as ${status}.`);
+      } catch (err) {
+        notify('Could not update campaign status.', 'error');
+        throw err;
+      }
     },
-    [notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const saveCalendarEntry = useCallback(
     async (entry: Omit<CalendarEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
-      const saved = await saveCalendarEntryStorage(storageMode, effectiveUid, entry);
-      setCalendar((prev) => {
-        const exists = prev.some((x) => x.id === saved.id);
-        const next = exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [...prev, saved];
-        return next.sort((a, b) => a.date.localeCompare(b.date));
-      });
-      notify(`Scheduled "${saved.title}" on ${saved.date}.`);
-      return saved;
+      const uid = requireVerifiedUid();
+      try {
+        const saved = await saveCalendarEntryStorage(uid, entry);
+        setCalendar((prev) => {
+          const exists = prev.some((x) => x.id === saved.id);
+          const next = exists ? prev.map((x) => (x.id === saved.id ? saved : x)) : [...prev, saved];
+          return next.sort((a, b) => a.date.localeCompare(b.date));
+        });
+        notify(`Scheduled "${saved.title}" on ${saved.date}.`);
+        return saved;
+      } catch (err) {
+        notify('Could not save calendar entry.', 'error');
+        throw err;
+      }
     },
-    [effectiveUid, notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const updateCalendarStatus = useCallback(
     async (id: string, status: CalendarEntry['status']) => {
-      await updateCalendarStatusStorage(storageMode, id, status);
-      setCalendar((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
-      notify(`Schedule status updated to ${status}.`);
+      requireVerifiedUid();
+      try {
+        await updateCalendarStatusStorage(id, status);
+        setCalendar((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+        notify(`Schedule status updated to ${status}.`);
+      } catch (err) {
+        notify('Could not update schedule status.', 'error');
+        throw err;
+      }
     },
-    [notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const deleteCalendarEntry = useCallback(
     async (id: string) => {
-      await deleteCalendarEntryStorage(storageMode, id);
-      setCalendar((prev) => prev.filter((c) => c.id !== id));
-      notify('Deleted calendar entry.');
+      requireVerifiedUid();
+      try {
+        await deleteCalendarEntryStorage(id);
+        setCalendar((prev) => prev.filter((c) => c.id !== id));
+        notify('Deleted calendar entry.');
+      } catch (err) {
+        notify('Could not delete calendar entry.', 'error');
+        throw err;
+      }
     },
-    [notify, storageMode]
+    [notify, requireVerifiedUid]
   );
 
   const recordActivity = useCallback(
     async (tool: string, title: string) => {
+      if (!firebaseUser || !firebaseUser.emailVerified) return;
       try {
-        const log = await logActivityStorage(storageMode, effectiveUid, tool, title);
+        const log = await logActivityStorage(firebaseUser.uid, tool, title);
         setActivityLogs((prev) => [...prev, log]);
       } catch {
         // non-blocking activity log
       }
     },
-    [effectiveUid, storageMode]
+    [firebaseUser]
   );
 
   return (
@@ -440,8 +465,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         authLoading,
         workspaceLoading,
         firebaseUser,
-        demoMode,
-        storageMode,
         effectiveUid,
         brandVoice,
         creatorProfile,
@@ -458,8 +481,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         resetPassword,
         resendVerificationEmail,
         logout,
-        enterDemoMode,
-        resetDemoData,
         saveBrandVoice,
         saveCreatorProfile,
         saveLibraryItem,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Bookmark, CalendarPlus, Check, Loader2, Play, RefreshCw } from 'lucide-react';
-import { motion } from 'motion/react';
+import { CalendarPlus, Check, Loader2, Play, RefreshCw } from 'lucide-react';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { runAutopilotStepApi } from '../../services/aiClient';
 import type {
@@ -12,10 +12,14 @@ import {
   CopyTextButton,
   GlassButton,
   GlassCard,
+  GlassSelect,
   inputClassName,
   labelClassName,
   PrimaryButton,
+  ResultsSkeleton,
+  SaveActionButton,
 } from '../../components/ui/GlassPrimitives';
+import { MOTION_EASING, useMotionSettings } from '../../config/motion';
 
 const STEPS: Array<{ id: AutopilotStepId; title: string; subtitle: string }> = [
   { id: 'preferences', title: '01. Understand Preferences', subtitle: 'Pillars & brand voice alignment' },
@@ -27,100 +31,6 @@ const STEPS: Array<{ id: AutopilotStepId; title: string; subtitle: string }> = [
   { id: 'improve', title: '07. Content Doctor Fixes', subtitle: 'Tightened hook, pacing & CTA' },
   { id: 'calendar', title: '08. Weekly Publishing Plan', subtitle: 'Ready-to-schedule post slots' },
 ];
-
-const SAMPLE_AUTOPILOT: AutopilotState = {
-  preferences: {
-    positioningSummary: 'Focused on practical studio workflows for creators filming in small spaces.',
-    contentPillars: ['One-light lighting setups', 'Retention pacing edits', 'Weekly batching systems'],
-    toneAlignment: 'Storytelling — direct, calm, zero-fluff delivery.',
-  },
-  strategy: {
-    campaignTitle: 'Small-Room Studio Mastery Sprint',
-    overview: 'A 7-day sequence proving that light contrast and tight editing outperform expensive camera upgrades.',
-    targetOutcome: 'Increase saves and shares among solo creators.',
-    cadenceRecommendation: '5 short-form drops alternating Reels and Shorts.',
-  },
-  ideas: [
-    {
-      id: 'sample_ap_1',
-      title: 'Why Your Ceiling Light Ruins Video Depth',
-      description: 'Side-by-side switch from overhead light to a 45-degree soft key.',
-      hook: 'Before buying a new camera, turn off your ceiling light.',
-      format: '45s Reel',
-      audienceRelevance: 'Instant win for home-office creators.',
-      cta: 'Save before filming tomorrow.',
-    },
-  ],
-  script: {
-    title: 'Before Buying a New Camera, Turn Off Your Ceiling Light',
-    platform: 'Instagram Reels',
-    duration: '45s',
-    hook: 'Before buying a new camera, turn off your ceiling light.',
-    fullScript:
-      'Before buying a new camera, turn off your ceiling light. Overhead fixtures flatten shadows and wash out skin tones. Place one soft lamp 45 degrees off camera and leave the opposite wall dark. Instant depth.',
-    scenes: [
-      {
-        sceneNumber: 1,
-        timeRange: '0:00 - 0:06',
-        visual: 'Creator flicks off overhead switch in bedroom studio.',
-        voiceover: 'Before buying a new camera, turn off your ceiling light.',
-        transition: 'Snap cut on switch click',
-      },
-    ],
-    voiceoverNotes: 'Calm, confident pacing.',
-    visualSuggestions: ['Split-screen lighting comparison'],
-    transitionSuggestions: ['Audio pre-lap on switch click'],
-    endingAndCta: 'Save this angle rule before your next shoot.',
-  },
-  captions: [
-    {
-      style: 'Engaging',
-      caption: 'One 45-degree key light and a dark wall beats expensive gear every day.',
-      hashtags: ['#StudioSetup', '#CreatorTips', '#LightingDesign'],
-      cta: 'Which setup problem slows you down most?',
-    },
-  ],
-  quality: {
-    overallScore: 87,
-    summary: 'Strong visual contrast hook with immediate practical payoff.',
-    metrics: [
-      { label: 'Hook Strength', score: 91, explanation: 'Direct visual disruption.', fix: 'Show split-frame within 1.5s.' },
-      { label: 'Clarity', score: 89, explanation: 'Single actionable physical rule.', fix: 'Add 45° graphic overlay.' },
-    ],
-    topFixes: ['Show before/after frame in first 2 seconds'],
-    disclaimer: 'AI-generated estimate, not a prediction or guarantee of virality.',
-  },
-  improve: {
-    diagnosisSummary: 'Replaced abstract adjective with measurable 45-degree placement instruction.',
-    unnecessaryWording: ['basically', 'actually'],
-    improvedFullText:
-      'Turn off your ceiling light before buying a new camera. Put one soft lamp 45 degrees to your side and keep the far wall dark for instant depth.',
-    improvedHook: 'Turn off your ceiling light before buying a new camera.',
-    improvedCta: 'Save this 45-degree rule before your next shoot.',
-    changes: [
-      {
-        section: 'Opening Hook',
-        weakness: 'Delaying the actionable verb.',
-        originalSnippet: 'Before buying a new camera, turn off your ceiling light.',
-        improvedSnippet: 'Turn off your ceiling light before buying a new camera.',
-        reason: 'Leads immediately with the concrete physical action.',
-      },
-    ],
-  },
-  calendar: {
-    weeklyPlan: [
-      {
-        dayLabel: 'Day 1',
-        suggestedDate: new Date().toISOString().slice(0, 10),
-        platform: 'Instagram Reels',
-        format: '45s Reel',
-        title: 'Turn Off Your Ceiling Light',
-        hook: 'Turn off your ceiling light before buying a new camera.',
-        caption: 'One 45-degree key light and a dark wall beats expensive gear every day.',
-      },
-    ],
-  },
-};
 
 export function AutopilotPage() {
   const { brandVoice, saveLibraryItem, saveCampaign, saveCalendarEntry, recordActivity, notify } =
@@ -135,12 +45,13 @@ export function AutopilotPage() {
   const [goals, setGoals] = useState('Increase saves, retention, and weekly posting consistency');
 
   const [state, setState] = useState<AutopilotState>({});
-  const [isSample, setIsSample] = useState(false);
   const [running, setRunning] = useState(false);
   const [activeStep, setActiveStep] = useState<AutopilotStepId | null>(null);
   const [completedSteps, setCompletedSteps] = useState<AutopilotStepId[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedStepView, setSelectedStepView] = useState<AutopilotStepId>('preferences');
+
+  const { durations, tabTransition } = useMotionSettings();
 
   const effectiveVoice = { ...brandVoice, preset: voiceOverride };
 
@@ -179,7 +90,6 @@ export function AutopilotPage() {
 
     setRunning(true);
     setError(null);
-    setIsSample(false);
     setState({});
     setCompletedSteps([]);
 
@@ -205,7 +115,6 @@ export function AutopilotPage() {
   const handleRegenerateStep = async (step: AutopilotStepId) => {
     if (running || activeStep) return;
     setError(null);
-    setIsSample(false);
     try {
       await executeStep(step, state);
       notify(`Regenerated "${STEPS.find((s) => s.id === step)?.title}".`);
@@ -278,19 +187,20 @@ export function AutopilotPage() {
     notify(`Added ${plan.length} posts from Autopilot to Content Calendar.`);
   };
 
-  const progressPct = Math.round((completedSteps.length / STEPS.length) * 100);
+  const progressRatio = completedSteps.length / STEPS.length;
+  const progressPct = Math.round(progressRatio * 100);
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-white/10 pb-5">
+      <div className="border-b border-white/15 pb-5">
         <h1 className="text-2xl font-bold text-white">Creator Autopilot</h1>
-        <p className="mt-1 text-sm text-[#b8bcd0]">
+        <p className="mt-1 text-sm text-neutral-300">
           End-to-end autonomous pipeline connecting preferences, strategy, ideas, script, captions, viral critique, Content Doctor edits, and weekly schedule.
         </p>
       </div>
 
       {/* Autopilot Input Form */}
-      <GlassCard className="p-6">
+      <GlassCard index={0} className="p-6">
         <form onSubmit={handleRunFullAutopilot} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label htmlFor="ap-niche" className={labelClassName}>Niche</label>
@@ -333,31 +243,30 @@ export function AutopilotPage() {
           </div>
           <div>
             <label htmlFor="ap-voice" className={labelClassName}>Brand Voice</label>
-            <select
+            <GlassSelect
               id="ap-voice"
               value={voiceOverride}
-              onChange={(e) => setVoiceOverride(e.target.value as BrandVoicePreset)}
-              className={inputClassName}
-            >
-              {['Cinematic', 'Professional', 'Funny', 'Minimal', 'Educational', 'Storytelling', 'Bold', 'Friendly'].map(
-                (v) => (
-                  <option key={v} value={v}>{v}</option>
-                )
-              )}
-            </select>
+              onChange={(v) => setVoiceOverride(v as BrandVoicePreset)}
+              options={[
+                'Cinematic',
+                'Professional',
+                'Funny',
+                'Minimal',
+                'Educational',
+                'Storytelling',
+                'Bold',
+                'Friendly',
+              ]}
+            />
           </div>
           <div>
             <label htmlFor="ap-duration" className={labelClassName}>Duration</label>
-            <select
+            <GlassSelect
               id="ap-duration"
               value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className={inputClassName}
-            >
-              <option>5 days</option>
-              <option>7 days</option>
-              <option>14 days</option>
-            </select>
+              onChange={setDuration}
+              options={['5 days', '7 days', '14 days']}
+            />
           </div>
           <div className="sm:col-span-2">
             <label htmlFor="ap-goals" className={labelClassName}>Goals & Outcomes</label>
@@ -375,37 +284,22 @@ export function AutopilotPage() {
               {!running && <Play className="h-4 w-4" aria-hidden="true" />}
               <span>{running ? 'Running Autopilot...' : 'Run Full Autopilot'}</span>
             </PrimaryButton>
-            <GlassButton
-              disabled={running}
-              onClick={() => {
-                setError(null);
-                setState(SAMPLE_AUTOPILOT);
-                setIsSample(true);
-                setCompletedSteps(STEPS.map((s) => s.id));
-                setSelectedStepView('strategy');
-                notify('Loaded clearly labeled Sample data.');
-              }}
-            >
-              Load Sample Data
-            </GlassButton>
           </div>
         </form>
 
         {error && (
-          <div role="alert" className="mt-4 rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+          <div role="alert" className="glass mt-4 rounded-xl !border-white/35 !bg-white/10 px-4 py-3 text-xs text-white">
             {error}
           </div>
         )}
       </GlassCard>
 
-      {/* Real Progress Bar & Stepper */}
-      <GlassCard subtle className="p-6">
+      {/* Real Progress Stepper with Connecting Line */}
+      <GlassCard index={1} className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-white">
-              Workflow Progress {isSample ? '· Sample data' : ''}
-            </h2>
-            <p className="text-xs text-[#9ca2b8]">
+            <h2 className="text-sm font-semibold text-white">Workflow Progress</h2>
+            <p className="text-xs text-neutral-400">
               {activeStep
                 ? `Executing: ${STEPS.find((s) => s.id === activeStep)?.title}`
                 : completedSteps.length === STEPS.length
@@ -413,61 +307,173 @@ export function AutopilotPage() {
                 : 'Select any completed step to inspect or regenerate'}
             </p>
           </div>
-          <span className="font-mono text-sm font-semibold text-violet-300 tabular-nums">
+          <span className="font-mono text-sm font-semibold text-white tabular-nums">
             {completedSteps.length}/{STEPS.length} ({progressPct}%)
           </span>
         </div>
 
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
-          <motion.div
-            className="h-full bg-violet-500"
-            initial={false}
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 0.25 }}
-          />
+        {/* Visual Node + Connector Line Track (driven by real API step state) */}
+        <div className="mt-5 overflow-x-auto pb-1">
+          <div className="flex min-w-[540px] items-center justify-between px-1">
+            {STEPS.map((step, idx) => {
+              const done = completedSteps.includes(step.id);
+              const isActive = activeStep === step.id;
+              const nodeStatus = isActive ? 'active' : done ? 'done' : 'pending';
+              const segmentFilled = done;
+
+              return (
+                <React.Fragment key={step.id}>
+                  <motion.button
+                    type="button"
+                    onClick={() => setSelectedStepView(step.id)}
+                    aria-label={step.title}
+                    initial={false}
+                    animate={{
+                      scale: nodeStatus === 'active' ? 1.12 : 1,
+                      opacity: nodeStatus === 'pending' ? 0.5 : 1,
+                    }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: durations.base, ease: MOTION_EASING.out }}
+                    className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-mono font-semibold transition-colors ${
+                      nodeStatus === 'done'
+                        ? 'border-white bg-white text-[#050505]'
+                        : nodeStatus === 'active'
+                        ? 'border-white bg-white/20 text-white'
+                        : 'border-white/25 bg-black/40 text-neutral-400'
+                    }`}
+                  >
+                    <AnimatePresence mode="wait" initial={false}>
+                      {nodeStatus === 'active' ? (
+                        <motion.span
+                          key="spin"
+                          initial={{ opacity: 0, scale: 0.6 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.6 }}
+                          transition={{ duration: durations.micro }}
+                          className="inline-flex"
+                        >
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        </motion.span>
+                      ) : nodeStatus === 'done' ? (
+                        <motion.span
+                          key="done"
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.5 }}
+                          transition={{ duration: durations.micro }}
+                          className="inline-flex"
+                        >
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="num"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: durations.micro }}
+                        >
+                          {idx + 1}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+
+                  {idx < STEPS.length - 1 && (
+                    <div className="relative mx-1.5 h-[2px] flex-1 overflow-hidden rounded-full bg-white/15">
+                      <motion.div
+                        className="h-full w-full bg-white"
+                        style={{ transformOrigin: 'left' }}
+                        initial={false}
+                        animate={{
+                          scaleX: segmentFilled ? 1 : isActive ? 0.45 : 0,
+                          opacity: segmentFilled || isActive ? 1 : 0.2,
+                        }}
+                        transition={{ duration: durations.slow, ease: MOTION_EASING.out }}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((step) => {
-            const done = completedSteps.includes(step.id);
-            const isRunningStep = activeStep === step.id;
-            const isSelected = selectedStepView === step.id;
-            return (
-              <button
-                key={step.id}
-                type="button"
-                onClick={() => setSelectedStepView(step.id)}
-                className={`flex min-h-[56px] items-start justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
-                  isSelected
-                    ? 'border-violet-400/60 bg-violet-500/15'
-                    : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold text-white">{step.title}</p>
-                  <p className="truncate text-[11px] text-[#9ca2b8]">{step.subtitle}</p>
-                </div>
-                <span className="mt-0.5 shrink-0">
-                  {isRunningStep ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-violet-300" aria-hidden="true" />
-                  ) : done ? (
-                    <Check className="h-4 w-4 text-violet-300" aria-hidden="true" />
-                  ) : null}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <LayoutGroup id="autopilot-steps">
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((step) => {
+              const done = completedSteps.includes(step.id);
+              const isRunningStep = activeStep === step.id;
+              const isSelected = selectedStepView === step.id;
+              return (
+                <motion.button
+                  key={step.id}
+                  type="button"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+                  onClick={() => setSelectedStepView(step.id)}
+                  className="glass relative flex min-h-[56px] items-start justify-between gap-2 rounded-xl px-3.5 py-2.5 text-left transition-colors hover:border-white/30"
+                >
+                  {isSelected && (
+                    <motion.span
+                      layoutId="autopilot-selected-step"
+                      transition={{ layout: tabTransition }}
+                      className="pointer-events-none absolute inset-0 rounded-xl border border-white/45 bg-white/15"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <div className="relative z-10 min-w-0">
+                    <p className="truncate text-xs font-semibold text-white">{step.title}</p>
+                    <p className="truncate text-[11px] text-neutral-400">{step.subtitle}</p>
+                  </div>
+                  <span className="relative z-10 mt-0.5 shrink-0">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {isRunningStep ? (
+                        <motion.span
+                          key="spin"
+                          initial={{ opacity: 0, scale: 0.6 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.6 }}
+                          transition={{ duration: durations.micro }}
+                          className="inline-flex"
+                        >
+                          <Loader2 className="h-4 w-4 animate-spin text-white" aria-hidden="true" />
+                        </motion.span>
+                      ) : done ? (
+                        <motion.span
+                          key="check"
+                          initial={{ opacity: 0, scale: 0.6 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.6 }}
+                          transition={{ duration: durations.micro }}
+                          className="inline-flex"
+                        >
+                          <Check className="h-4 w-4 text-white" aria-hidden="true" />
+                        </motion.span>
+                      ) : null}
+                    </AnimatePresence>
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
+        </LayoutGroup>
       </GlassCard>
+
+      {/* Active Step Skeleton while executing first pass */}
+      {activeStep && !state[selectedStepView] && (
+        <ResultsSkeleton variant="script" />
+      )}
 
       {/* Active Step Output & Actions */}
       {completedSteps.length > 0 && (
-        <GlassCard className="p-6" withRefraction>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <GlassCard className="p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/15 pb-4">
             <div>
-              <p className="text-xs text-[#9ca2b8]">
+              <p className="text-xs text-neutral-400">
                 {STEPS.find((s) => s.id === selectedStepView)?.subtitle}
-                {isSample ? ' · Sample data' : ''}
               </p>
               <h2 className="text-lg font-semibold text-white">
                 {STEPS.find((s) => s.id === selectedStepView)?.title}
@@ -484,10 +490,11 @@ export function AutopilotPage() {
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Regenerate Step</span>
               </GlassButton>
-              <GlassButton onClick={handleSaveToLibrary} className="px-3 py-1.5 text-xs">
-                <Bookmark className="h-3.5 w-3.5 text-violet-300" aria-hidden="true" />
-                <span>Save Pack</span>
-              </GlassButton>
+              <SaveActionButton
+                onSave={handleSaveToLibrary}
+                label="Save Pack"
+                savedLabel="Saved Pack"
+              />
               {state.calendar?.weeklyPlan?.length ? (
                 <PrimaryButton onClick={handlePushToCalendar} className="px-3 py-1.5 text-xs">
                   <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -497,161 +504,170 @@ export function AutopilotPage() {
             </div>
           </div>
 
-          <div className="mt-5">
-            {selectedStepView === 'preferences' && state.preferences && (
-              <div className="space-y-3 text-sm">
-                <p className="text-white">{state.preferences.positioningSummary}</p>
-                <p className="text-xs text-violet-300">Tone Alignment: {state.preferences.toneAlignment}</p>
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-[#9ca2b8]">Content Pillars:</p>
-                  <ul className="list-disc pl-5 text-sm text-[#d9dce8]">
-                    {state.preferences.contentPillars.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {selectedStepView === 'strategy' && state.strategy && (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="ap-edit-title" className={labelClassName}>Campaign Title (Editable)</label>
-                  <input
-                    id="ap-edit-title"
-                    value={state.strategy.campaignTitle}
-                    onChange={(e) =>
-                      setState({
-                        ...state,
-                        strategy: { ...state.strategy!, campaignTitle: e.target.value },
-                      })
-                    }
-                    className={inputClassName}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="ap-edit-overview" className={labelClassName}>Final Campaign Overview (Editable)</label>
-                  <textarea
-                    id="ap-edit-overview"
-                    rows={4}
-                    value={state.strategy.overview}
-                    onChange={(e) =>
-                      setState({
-                        ...state,
-                        strategy: { ...state.strategy!, overview: e.target.value },
-                      })
-                    }
-                    className={inputClassName}
-                  />
-                </div>
-                <p className="text-xs text-[#b8bcd0]">
-                  Outcome: {state.strategy.targetOutcome} · Cadence: {state.strategy.cadenceRecommendation}
-                </p>
-              </div>
-            )}
-
-            {selectedStepView === 'ideas' && state.ideas && (
-              <div className="grid gap-4 md:grid-cols-2">
-                {state.ideas.map((idea) => (
-                  <div key={idea.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-2">
-                    <p className="text-xs text-violet-300">{idea.format}</p>
-                    <h3 className="text-sm font-semibold text-white">{idea.title}</h3>
-                    <p className="text-xs text-[#b8bcd0]">{idea.description}</p>
-                    <p className="text-xs text-white">Hook: {idea.hook}</p>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedStepView}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: durations.fast, ease: MOTION_EASING.out }}
+              className="mt-5"
+            >
+              {selectedStepView === 'preferences' && state.preferences && (
+                <div className="space-y-3 text-sm">
+                  <p className="text-white">{state.preferences.positioningSummary}</p>
+                  <p className="text-xs text-neutral-300">Tone Alignment: {state.preferences.toneAlignment}</p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-neutral-400">Content Pillars:</p>
+                    <ul className="list-disc pl-5 text-sm text-neutral-200">
+                      {state.preferences.contentPillars.map((p, i) => (
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {selectedStepView === 'script' && state.script && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-white">{state.script.title}</h3>
-                  <CopyTextButton text={`${state.script.hook}\n\n${state.script.fullScript}`} />
                 </div>
-                <p className="text-sm text-violet-200">Hook: {state.script.hook}</p>
-                <p className="whitespace-pre-line text-sm text-[#d9dce8]">{state.script.fullScript}</p>
-              </div>
-            )}
+              )}
 
-            {selectedStepView === 'captions' && state.captions && (
-              <div className="space-y-3">
-                {state.captions.map((cap, idx) => (
-                  <div key={idx} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-violet-300">{cap.style}</span>
-                      <CopyTextButton text={`${cap.caption}\n${cap.hashtags.join(' ')}`} />
-                    </div>
-                    <p className="mt-2 text-sm text-white">{cap.caption}</p>
-                    <p className="mt-1 font-mono text-xs text-[#9ca2b8]">{cap.hashtags.join(' ')}</p>
+              {selectedStepView === 'strategy' && state.strategy && (
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="ap-edit-title" className={labelClassName}>Campaign Title (Editable)</label>
+                    <input
+                      id="ap-edit-title"
+                      value={state.strategy.campaignTitle}
+                      onChange={(e) =>
+                        setState({
+                          ...state,
+                          strategy: { ...state.strategy!, campaignTitle: e.target.value },
+                        })
+                      }
+                      className={inputClassName}
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-
-            {selectedStepView === 'quality' && state.quality && (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-mono text-2xl font-bold text-white tabular-nums">
-                    Score: {state.quality.overallScore}/100
+                  <div>
+                    <label htmlFor="ap-edit-overview" className={labelClassName}>Final Campaign Overview (Editable)</label>
+                    <textarea
+                      id="ap-edit-overview"
+                      rows={4}
+                      value={state.strategy.overview}
+                      onChange={(e) =>
+                        setState({
+                          ...state,
+                          strategy: { ...state.strategy!, overview: e.target.value },
+                        })
+                      }
+                      className={inputClassName}
+                    />
+                  </div>
+                  <p className="text-xs text-neutral-300">
+                    Outcome: {state.strategy.targetOutcome} · Cadence: {state.strategy.cadenceRecommendation}
                   </p>
-                  <p className="text-xs text-amber-300">{state.quality.disclaimer}</p>
                 </div>
-                <p className="text-sm text-[#b8bcd0]">{state.quality.summary}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {state.quality.metrics.map((m) => (
-                    <div key={m.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
-                      <div className="flex justify-between text-xs font-medium text-white">
-                        <span>{m.label}</span>
-                        <span className="font-mono tabular-nums text-violet-300">{m.score}/100</span>
-                      </div>
-                      <p className="mt-1 text-xs text-[#9ca2b8]">{m.fix}</p>
+              )}
+
+              {selectedStepView === 'ideas' && state.ideas && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {state.ideas.map((idea) => (
+                    <div key={idea.id} className="glass rounded-xl p-4 space-y-2">
+                      <p className="text-xs text-neutral-400">{idea.format}</p>
+                      <h3 className="text-sm font-semibold text-white">{idea.title}</h3>
+                      <p className="text-xs text-neutral-300">{idea.description}</p>
+                      <p className="text-xs text-white">Hook: {idea.hook}</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            {selectedStepView === 'improve' && state.improve && (
-              <div className="space-y-4">
-                <p className="text-sm text-[#b8bcd0]">{state.improve.diagnosisSummary}</p>
-                <div className="rounded-xl border border-violet-400/30 bg-violet-500/10 p-4">
+              {selectedStepView === 'script' && state.script && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-violet-300">Improved Draft</span>
-                    <CopyTextButton text={state.improve.improvedFullText} />
+                    <h3 className="text-base font-semibold text-white">{state.script.title}</h3>
+                    <CopyTextButton text={`${state.script.hook}\n\n${state.script.fullScript}`} />
                   </div>
-                  <p className="mt-2 whitespace-pre-line text-sm text-white">
-                    {state.improve.improvedFullText}
-                  </p>
+                  <p className="text-sm text-neutral-200">Hook: {state.script.hook}</p>
+                  <p className="whitespace-pre-line text-sm text-neutral-300">{state.script.fullScript}</p>
                 </div>
-              </div>
-            )}
+              )}
 
-            {selectedStepView === 'calendar' && state.calendar && (
-              <div className="space-y-3">
-                {state.calendar.weeklyPlan.map((slot, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center"
-                  >
-                    <div>
-                      <p className="text-xs text-violet-300">
-                        {slot.dayLabel} · {slot.suggestedDate} · {slot.platform} ({slot.format})
-                      </p>
-                      <h3 className="mt-1 text-sm font-semibold text-white">{slot.title}</h3>
-                      <p className="mt-0.5 text-xs text-[#b8bcd0]">{slot.hook}</p>
+              {selectedStepView === 'captions' && state.captions && (
+                <div className="space-y-3">
+                  {state.captions.map((cap, idx) => (
+                    <div key={idx} className="glass rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-white">{cap.style}</span>
+                        <CopyTextButton text={`${cap.caption}\n${cap.hashtags.join(' ')}`} />
+                      </div>
+                      <p className="mt-2 text-sm text-white">{cap.caption}</p>
+                      <p className="mt-1 font-mono text-xs text-neutral-400">{cap.hashtags.join(' ')}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {!state[selectedStepView] && (
-              <p className="text-sm text-[#9ca2b8]">
-                This step has not run yet. Click Run Full Autopilot or Regenerate Step.
-              </p>
-            )}
-          </div>
+              {selectedStepView === 'quality' && state.quality && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="font-mono text-2xl font-bold text-white tabular-nums">
+                      Score: {state.quality.overallScore}/100
+                    </p>
+                    <p className="text-xs text-neutral-300">{state.quality.disclaimer}</p>
+                  </div>
+                  <p className="text-sm text-neutral-300">{state.quality.summary}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {state.quality.metrics.map((m) => (
+                      <div key={m.label} className="glass rounded-xl p-3.5">
+                        <div className="flex justify-between text-xs font-medium text-white">
+                          <span>{m.label}</span>
+                          <span className="font-mono tabular-nums text-neutral-200">{m.score}/100</span>
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-400">{m.fix}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedStepView === 'improve' && state.improve && (
+                <div className="space-y-4">
+                  <p className="text-sm text-neutral-300">{state.improve.diagnosisSummary}</p>
+                  <div className="glass rounded-xl !border-white/25 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white">Improved Draft</span>
+                      <CopyTextButton text={state.improve.improvedFullText} />
+                    </div>
+                    <p className="mt-2 whitespace-pre-line text-sm text-white">
+                      {state.improve.improvedFullText}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedStepView === 'calendar' && state.calendar && (
+                <div className="space-y-3">
+                  {state.calendar.weeklyPlan.map((slot, idx) => (
+                    <div
+                      key={idx}
+                      className="glass flex flex-col justify-between gap-2 rounded-xl p-4 sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <p className="text-xs text-neutral-400">
+                          {slot.dayLabel} · {slot.suggestedDate} · {slot.platform} ({slot.format})
+                        </p>
+                        <h3 className="mt-1 text-sm font-semibold text-white">{slot.title}</h3>
+                        <p className="mt-0.5 text-xs text-neutral-300">{slot.hook}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!state[selectedStepView] && (
+                <p className="text-sm text-neutral-400">
+                  This step has not run yet. Click Run Full Autopilot or Regenerate Step.
+                </p>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </GlassCard>
       )}
     </div>
