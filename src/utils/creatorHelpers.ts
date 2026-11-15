@@ -133,7 +133,7 @@ export function mapFirebaseAuthError(codeOrMessage: string): string {
     return 'Google sign-in popup was closed before finishing.';
   }
   if (lower.includes('auth/popup-blocked')) {
-    return 'Popup was blocked by your browser. Switching to redirect sign-in...';
+    return 'Popup was blocked by your browser. Please allow popups for this site and click Continue with Google again.';
   }
   if (lower.includes('auth/operation-not-allowed')) {
     return 'This sign-in provider is not enabled yet in Firebase Console Authentication > Sign-in method.';

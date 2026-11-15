@@ -1,13 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
-  getRedirectResult,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
   updateProfile,
   type User,
@@ -83,14 +81,6 @@ interface WorkspaceContextValue {
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
-
-function isMobileOrIosSafari(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent;
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-  const isIosSafari = /iP(ad|hone|od)/i.test(ua) && /WebKit/i.test(ua) && !/CriOS|FxiOS/i.test(ua);
-  return isMobile || isIosSafari;
-}
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = useState<AppView>(() => {
@@ -172,17 +162,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          setView('dashboard');
-          notify(`Welcome back, ${result.user.displayName || result.user.email}`);
-        }
-      })
-      .catch((err) => {
-        notify(mapFirebaseAuthError(err?.code || err?.message || ''), 'error');
-      });
-
     const unsub = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       setAuthLoading(false);
@@ -215,10 +194,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Firebase Authentication is not configured.');
     }
     try {
-      if (isMobileOrIosSafari()) {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
       const cred = await signInWithPopup(auth, googleProvider);
       if (cred.user) {
         setView('dashboard');
@@ -226,10 +201,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
-      if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request') {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
       throw new Error(mapFirebaseAuthError(code || (err instanceof Error ? err.message : '')));
     }
   }, [notify]);

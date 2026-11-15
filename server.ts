@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ThinkingLevel } from '@google/genai';
@@ -78,7 +79,7 @@ function getBrandVoice(body: Record<string, unknown>): Partial<BrandVoiceConfig>
   return undefined;
 }
 
-export async function createApp() {
+export async function createApp(httpServer?: http.Server) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
@@ -480,8 +481,17 @@ ${librarySummary ? `Creator Saved Library Context:\n${librarySummary}` : 'Saved 
     });
   } else {
     const { createServer: createViteServer } = await import('vite');
+    const disableHmr = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ...(httpServer
+          ? {
+              hmr: disableHmr ? false : { server: httpServer },
+              ws: { server: httpServer },
+            }
+          : {}),
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -491,9 +501,11 @@ ${librarySummary ? `Creator Saved Library Context:\n${librarySummary}` : 'Saved 
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  createApp()
+  const httpServer = http.createServer();
+  createApp(httpServer)
     .then((app) => {
-      app.listen(PORT, '0.0.0.0', () => {
+      httpServer.on('request', app);
+      httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`IDEONIX server listening on http://0.0.0.0:${PORT}`);
       });
     })
