@@ -13,17 +13,32 @@ import type {
 } from '../types/ideonix';
 
 async function postAi<T>(endpoint: string, payload: Record<string, unknown>): Promise<T> {
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
 
-  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string } & T;
-  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string } & T;
+    if (res.ok) {
+      return data;
+    }
+
+    if (attempt === 0 && (res.status === 429 || res.status === 503)) {
+      const retryAfterSec = Number(res.headers.get('Retry-After') || '0');
+      const delayMs =
+        Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? Math.min(retryAfterSec * 1000, 4000)
+          : 2000;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      continue;
+    }
+
     throw new Error(data.error || `Request failed with status ${res.status}`);
   }
-  return data;
+
+  throw new Error('AI request failed after retry.');
 }
 
 export async function checkApiHealth(): Promise<{ ok: boolean; aiConfigured: boolean }> {

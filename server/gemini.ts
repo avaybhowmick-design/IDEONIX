@@ -1,6 +1,21 @@
 import { GoogleGenAI, ThinkingLevel, type Schema } from '@google/genai';
+import {
+  computeCooldownDurationMs,
+  extractRetryDelayMs,
+  GEMINI_FALLBACK_MODELS,
+  isModelUnavailableError,
+  isQuotaOrRateLimitError,
+  isTransientGeminiError,
+  ModelCooldownTracker,
+  RequestPacer,
+  sanitizeErrorMessage,
+} from './geminiResilience.ts';
 
-export const GEMINI_MODEL = 'gemini-4-hydrogen';
+export const GEMINI_MODEL = GEMINI_FALLBACK_MODELS[0];
+
+const cooldownTracker = new ModelCooldownTracker();
+const requestPacer = new RequestPacer(350);
+const inFlightRequests = new Map<string, Promise<unknown>>();
 
 export class AiServiceError extends Error {
   readonly statusCode: number;
@@ -38,16 +53,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isTransientError(err: unknown): boolean {
+function isThinkingConfigError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
-  return (
-    msg.includes('503') ||
-    msg.includes('unavailable') ||
-    msg.includes('timeout') ||
-    msg.includes('econnreset') ||
-    msg.includes('429') ||
-    msg.includes('resource_exhausted')
-  );
+  return msg.includes('thinking') && (msg.includes('400') || msg.includes('invalid_argument') || msg.includes('not supported'));
 }
 
 function mapGeminiError(err: unknown): AiServiceError {
@@ -62,7 +70,7 @@ function mapGeminiError(err: unknown): AiServiceError {
       'API_KEY_INVALID'
     );
   }
-  if (lower.includes('resource_exhausted') || lower.includes('429')) {
+  if (isQuotaOrRateLimitError(err)) {
     return new AiServiceError(
       'Gemini API rate limit or quota reached. Please wait a moment and try again.',
       429,
@@ -78,10 +86,77 @@ function mapGeminiError(err: unknown): AiServiceError {
   }
 
   return new AiServiceError(
-    `AI generation failed: ${msg}`,
+    `AI generation failed: ${sanitizeErrorMessage(msg)}`,
     502,
     'UPSTREAM_AI_ERROR'
   );
+}
+
+async function runWithModelFallback<T>(
+  executor: (model: string, omitThinking?: boolean) => Promise<T>,
+  maxRetriesPerModel = 2
+): Promise<T> {
+  const orderedModels = cooldownTracker.getOrderedModels(GEMINI_FALLBACK_MODELS);
+  let lastError: unknown;
+
+  for (let mIdx = 0; mIdx < orderedModels.length; mIdx++) {
+    const model = orderedModels[mIdx];
+    const hasNextModel = mIdx < orderedModels.length - 1;
+    let omitThinking = false;
+
+    for (let attempt = 0; attempt <= maxRetriesPerModel; attempt++) {
+      try {
+        return await requestPacer.schedule(() => executor(model, omitThinking));
+      } catch (err) {
+        lastError = err;
+        const rawMsg = err instanceof Error ? err.message : String(err);
+
+        if (!omitThinking && isThinkingConfigError(err)) {
+          omitThinking = true;
+          continue;
+        }
+
+        if (isQuotaOrRateLimitError(err)) {
+          const cooldownMs = computeCooldownDurationMs(err);
+          cooldownTracker.markCooldown(model, cooldownMs);
+          console.warn(`[IDEONIX Gemini] ${model} quota/rate-limited: ${sanitizeErrorMessage(rawMsg)}`);
+
+          if (hasNextModel) {
+            break;
+          }
+        } else if (isModelUnavailableError(err)) {
+          cooldownTracker.markCooldown(model, 5 * 60_000);
+          console.warn(`[IDEONIX Gemini] ${model} unavailable: ${sanitizeErrorMessage(rawMsg)}`);
+          if (hasNextModel) {
+            break;
+          }
+        }
+
+        if (attempt < maxRetriesPerModel && isTransientGeminiError(err)) {
+          const hintedDelay = extractRetryDelayMs(err);
+          const jitter = Math.floor(Math.random() * 250);
+          const backoffMs = (hintedDelay ?? 900 * Math.pow(2, attempt)) + jitter;
+          await sleep(backoffMs);
+          continue;
+        }
+
+        break;
+      }
+    }
+  }
+
+  throw mapGeminiError(lastError);
+}
+
+function coalesceInFlight<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const existing = inFlightRequests.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const promise = work().finally(() => {
+    inFlightRequests.delete(key);
+  });
+  inFlightRequests.set(key, promise);
+  return promise;
 }
 
 export async function generateStructuredJson<T>(options: {
@@ -93,18 +168,20 @@ export async function generateStructuredJson<T>(options: {
 }): Promise<T> {
   const ai = getClient();
   const maxRetries = options.maxRetries ?? 2;
-  let lastError: unknown;
+  const dedupeKey = `json:${options.thinkingLevel ?? ''}:${options.systemInstruction}\n---\n${options.prompt}`;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
+  return coalesceInFlight(dedupeKey, () =>
+    runWithModelFallback(async (model, omitThinking) => {
       const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
+        model,
         contents: options.prompt,
         config: {
           systemInstruction: options.systemInstruction,
           responseMimeType: 'application/json',
           responseSchema: options.responseSchema,
-          ...(options.thinkingLevel ? { thinkingConfig: { thinkingLevel: options.thinkingLevel } } : {}),
+          ...(options.thinkingLevel && !omitThinking
+            ? { thinkingConfig: { thinkingLevel: options.thinkingLevel } }
+            : {}),
         },
       });
 
@@ -114,17 +191,8 @@ export async function generateStructuredJson<T>(options: {
       }
 
       return JSON.parse(raw) as T;
-    } catch (err) {
-      lastError = err;
-      if (attempt < maxRetries && isTransientError(err)) {
-        await sleep(500 * Math.pow(2, attempt));
-        continue;
-      }
-      throw mapGeminiError(err);
-    }
-  }
-
-  throw mapGeminiError(lastError);
+    }, maxRetries)
+  );
 }
 
 export async function generateChatReply(options: {
@@ -133,22 +201,22 @@ export async function generateChatReply(options: {
   message: string;
 }): Promise<string> {
   const ai = getClient();
-  try {
-    const formattedHistory = options.history
-      .slice(-8)
-      .map((m) => `${m.role === 'user' ? 'Creator' : 'IDEONIX Assistant'}: ${m.text}`)
-      .join('\n\n');
+  const formattedHistory = options.history
+    .slice(-8)
+    .map((m) => `${m.role === 'user' ? 'Creator' : 'IDEONIX Assistant'}: ${m.text}`)
+    .join('\n\n');
 
-    const prompt = formattedHistory
-      ? `Recent conversation:\n${formattedHistory}\n\nCreator: ${options.message}`
-      : options.message;
+  const prompt = formattedHistory
+    ? `Recent conversation:\n${formattedHistory}\n\nCreator: ${options.message}`
+    : options.message;
 
+  return runWithModelFallback(async (model, omitThinking) => {
     const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
+      model,
       contents: prompt,
       config: {
         systemInstruction: options.systemInstruction,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        ...(!omitThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
       },
     });
 
@@ -157,7 +225,5 @@ export async function generateChatReply(options: {
       throw new AiServiceError('Assistant returned an empty response.', 502, 'EMPTY_AI_RESPONSE');
     }
     return text;
-  } catch (err) {
-    throw mapGeminiError(err);
-  }
+  }, 2);
 }
