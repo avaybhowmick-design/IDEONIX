@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,8 +40,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 3000);
-const isCloudRunOrProdEnv =
-  process.env.NODE_ENV === 'production' || Boolean(process.env.K_SERVICE);
+const isProdEnv = process.env.NODE_ENV === 'production';
 
 // 40 AI requests per minute per client IP
 const aiLimiter = new TokenBucketRateLimiter(40, 60_000);
@@ -479,17 +479,22 @@ ${librarySummary ? `Creator Saved Library Context:\n${librarySummary}` : 'Saved 
     res.status(404).json({ error: 'API route not found.', code: 'NOT_FOUND' });
   });
 
+  const distDir = path.resolve(__dirname, 'dist');
+  const distIndex = path.join(distDir, 'index.html');
+
   let viteModule: typeof import('vite') | null = null;
-  if (!isCloudRunOrProdEnv) {
-    try {
-      viteModule = await import('vite');
-    } catch {
-      viteModule = null;
-    }
+  try {
+    viteModule = await import('vite');
+  } catch {
+    viteModule = null;
   }
 
-  if (isCloudRunOrProdEnv || !viteModule) {
-    const distDir = path.resolve(__dirname, 'dist');
+  if (isProdEnv && !fs.existsSync(distIndex) && viteModule) {
+    console.log('Production dist/index.html not found; building production bundle...');
+    await viteModule.build();
+  }
+
+  if (isProdEnv || !viteModule) {
     app.use(
       express.static(distDir, {
         maxAge: '1h',
@@ -501,8 +506,12 @@ ${librarySummary ? `Creator Saved Library Context:\n${librarySummary}` : 'Saved 
       })
     );
     app.get('*', (_req, res) => {
+      if (!fs.existsSync(distIndex)) {
+        res.status(503).send('Application bundle is not built yet. Run npm run build.');
+        return;
+      }
       res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(distDir, 'index.html'));
+      res.sendFile(distIndex);
     });
   } else {
     const { createServer: createViteServer } = viteModule;
